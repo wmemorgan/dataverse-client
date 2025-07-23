@@ -16,6 +16,22 @@ namespace Dataverse.Client.Tests.TestInfrastructure;
 public static class MockServiceClientHelper
 {
     /// <summary>
+    /// Creates a basic mock ServiceClient that can be used for testing purposes.
+    /// </summary>
+    /// <returns></returns>
+    public static Mock<ServiceClient> CreateMockServiceClient()
+    {
+        var mock = new Mock<ServiceClient>();
+
+        // Setup basic methods that might be called
+        mock.Setup(x => x.Execute(It.IsAny<OrganizationRequest>()))
+            .Returns(new OrganizationResponse());
+
+        return mock;
+    }
+
+
+    /// <summary>
     /// Creates a basic mock ServiceClient that returns predictable responses.
     /// This avoids the complexity of mocking non-virtual ServiceClient members.
     /// </summary>
