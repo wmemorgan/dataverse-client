@@ -1,5 +1,6 @@
 using Dataverse.Client.Interfaces;
 using Dataverse.Client.Models;
+using Dataverse.Client.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.PowerPlatform.Dataverse.Client;
@@ -350,8 +351,8 @@ public class BatchProcessor(
             foreach (Entity entity in entities)
                 executeMultipleRequest.Requests.Add(new CreateRequest { Target = entity });
 
-            ExecuteMultipleResponse executeMultipleResponse =
-                await ExecuteWithRetryAsync<ExecuteMultipleResponse>(executeMultipleRequest);
+            ExecuteMultipleResponse executeMultipleResponse = await DataverseRequestExecutor.ExecuteWithRetryAsync<ExecuteMultipleResponse>(
+                _serviceClient, executeMultipleRequest, _options, _logger, "Batch create request");
 
             // Process responses
             for (int i = 0; i < executeMultipleResponse.Responses.Count; i++)
@@ -420,8 +421,8 @@ public class BatchProcessor(
             foreach (Entity entity in entities)
                 executeMultipleRequest.Requests.Add(new UpdateRequest { Target = entity });
 
-            ExecuteMultipleResponse executeMultipleResponse =
-                await ExecuteWithRetryAsync<ExecuteMultipleResponse>(executeMultipleRequest);
+            ExecuteMultipleResponse executeMultipleResponse = await DataverseRequestExecutor.ExecuteWithRetryAsync<ExecuteMultipleResponse>(
+                _serviceClient, executeMultipleRequest, _options, _logger, "Batch update request");
 
             // Process responses
             for (int i = 0; i < executeMultipleResponse.Responses.Count; i++)
@@ -490,8 +491,8 @@ public class BatchProcessor(
             foreach (EntityReference entityRef in entityReferences)
                 executeMultipleRequest.Requests.Add(new DeleteRequest { Target = entityRef });
 
-            ExecuteMultipleResponse executeMultipleResponse =
-                await ExecuteWithRetryAsync<ExecuteMultipleResponse>(executeMultipleRequest);
+            ExecuteMultipleResponse executeMultipleResponse = await DataverseRequestExecutor.ExecuteWithRetryAsync<ExecuteMultipleResponse>(
+                _serviceClient, executeMultipleRequest, _options, _logger, "Batch delete request");
 
             // Process responses
             for (int i = 0; i < executeMultipleResponse.Responses.Count; i++)
@@ -560,8 +561,8 @@ public class BatchProcessor(
             foreach (EntityReference entityRef in entityReferences)
                 executeMultipleRequest.Requests.Add(new RetrieveRequest { Target = entityRef, ColumnSet = columns });
 
-            ExecuteMultipleResponse executeMultipleResponse =
-                await ExecuteWithRetryAsync<ExecuteMultipleResponse>(executeMultipleRequest);
+            ExecuteMultipleResponse executeMultipleResponse = await DataverseRequestExecutor.ExecuteWithRetryAsync<ExecuteMultipleResponse>(
+                _serviceClient, executeMultipleRequest, _options, _logger, "Batch retrieve request");
 
             // Process responses
             for (int i = 0; i < executeMultipleResponse.Responses.Count; i++)
@@ -615,45 +616,6 @@ public class BatchProcessor(
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Executes a request with retry logic for handling transient failures.
-    /// </summary>
-    private async Task<TResponse> ExecuteWithRetryAsync<TResponse>(OrganizationRequest request)
-        where TResponse : OrganizationResponse
-    {
-        int maxRetries = _options.RetryAttempts;
-        int currentAttempt = 0;
-
-        while (currentAttempt <= maxRetries)
-        {
-            try
-            {
-                OrganizationResponse? response = await Task.Run(() => _serviceClient.Execute(request));
-                return (TResponse)response;
-            }
-            catch (Exception ex) when (currentAttempt < maxRetries && DataverseUtilities.IsTransientException(ex))
-            {
-                currentAttempt++;
-                int retryDelay = DataverseUtilities.CalculateRetryDelay(currentAttempt, _options.RetryDelayMs);
-
-                _logger.LogWarning(ex,
-                    "Batch request failed with transient error on attempt {Attempt}/{MaxAttempts}. Retrying in {Delay}ms",
-                    currentAttempt, maxRetries + 1, retryDelay);
-
-                await Task.Delay(retryDelay);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Batch request failed on attempt {Attempt}/{MaxAttempts} with non-transient error",
-                    currentAttempt + 1, maxRetries + 1);
-                throw;
-            }
-        }
-
-        throw new DataverseException(DataverseConstants.ErrorCodes.Timeout,
-            $"Batch request failed after {maxRetries + 1} attempts");
     }
 
     #endregion

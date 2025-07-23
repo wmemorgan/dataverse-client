@@ -1,5 +1,6 @@
 using Dataverse.Client.Interfaces;
 using Dataverse.Client.Models;
+using Dataverse.Client.Utilities;
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -70,7 +71,8 @@ public class DataverseClient : IDataverseClient
             }
 
             WhoAmIRequest whoAmIRequest = new();
-            WhoAmIResponse? whoAmIResponse = await ExecuteRequestWithRetryAsync<WhoAmIResponse>(whoAmIRequest);
+            WhoAmIResponse? whoAmIResponse = await DataverseRequestExecutor.ExecuteWithRetryAsync<WhoAmIResponse>(
+                _serviceClient, whoAmIRequest, _options, _logger, "Connection validation");
 
             if (whoAmIResponse?.UserId != null && whoAmIResponse.UserId != Guid.Empty)
             {
@@ -151,7 +153,8 @@ public class DataverseClient : IDataverseClient
                 entity.LogicalName, entity.Attributes.Count);
 
             CreateRequest request = new() { Target = entity };
-            CreateResponse response = await ExecuteRequestWithRetryAsync<CreateResponse>(request);
+            CreateResponse response = await DataverseRequestExecutor.ExecuteWithRetryAsync<CreateResponse>(
+                _serviceClient, request, _options, _logger, "Create request");
 
             Guid createdId = response.id;
             _logger.LogInformation("Successfully created {EntityName} with ID {EntityId}",
@@ -183,7 +186,8 @@ public class DataverseClient : IDataverseClient
 
             RetrieveRequest request = new() { Target = new EntityReference(entityName, id), ColumnSet = columns };
 
-            RetrieveResponse response = await ExecuteRequestWithRetryAsync<RetrieveResponse>(request);
+            RetrieveResponse response = await DataverseRequestExecutor.ExecuteWithRetryAsync<RetrieveResponse>(
+                _serviceClient, request, _options, _logger, "Retrieve request");
 
             _logger.LogInformation("Successfully retrieved {EntityName} with ID {EntityId}",
                 entityName, id);
@@ -213,7 +217,8 @@ public class DataverseClient : IDataverseClient
                 entity.LogicalName, entity.Id, entity.Attributes.Count);
 
             UpdateRequest request = new() { Target = entity };
-            await ExecuteRequestWithRetryAsync<UpdateResponse>(request);
+            await DataverseRequestExecutor.ExecuteWithRetryAsync<UpdateResponse>(
+                _serviceClient, request, _options, _logger, "Update request");
 
             _logger.LogInformation("Successfully updated {EntityName} with ID {EntityId}",
                 entity.LogicalName, entity.Id);
@@ -241,7 +246,8 @@ public class DataverseClient : IDataverseClient
 
             DeleteRequest request = new() { Target = new EntityReference(entityName, id) };
 
-            await ExecuteRequestWithRetryAsync<DeleteResponse>(request);
+            await DataverseRequestExecutor.ExecuteWithRetryAsync<DeleteResponse>(
+                _serviceClient, request, _options, _logger, "Delete request");
 
             _logger.LogInformation("Successfully deleted {EntityName} with ID {EntityId}",
                 entityName, id);
@@ -380,7 +386,8 @@ public class DataverseClient : IDataverseClient
                 query.EntityName, query.Criteria?.Conditions?.Count ?? 0);
 
             RetrieveMultipleRequest request = new() { Query = query };
-            RetrieveMultipleResponse response = await ExecuteRequestWithRetryAsync<RetrieveMultipleResponse>(request);
+            RetrieveMultipleResponse response = await DataverseRequestExecutor.ExecuteWithRetryAsync<RetrieveMultipleResponse>(
+                _serviceClient, request, _options, _logger, "Query request");
 
             _logger.LogInformation("Query executed successfully, returned {EntityCount} records",
                 response.EntityCollection.Entities.Count);
@@ -407,7 +414,8 @@ public class DataverseClient : IDataverseClient
             _logger.LogDebug("Executing FetchXML query");
 
             RetrieveMultipleRequest request = new() { Query = new FetchExpression(fetchXml) };
-            RetrieveMultipleResponse response = await ExecuteRequestWithRetryAsync<RetrieveMultipleResponse>(request);
+            RetrieveMultipleResponse response = await DataverseRequestExecutor.ExecuteWithRetryAsync<RetrieveMultipleResponse>(
+                _serviceClient, request, _options, _logger, "FetchXML request");
 
             _logger.LogInformation("FetchXML query executed successfully, returned {EntityCount} records",
                 response.EntityCollection.Entities.Count);
@@ -518,46 +526,6 @@ public class DataverseClient : IDataverseClient
     #endregion
 
     #region Private Helper Methods
-
-    /// <summary>
-    /// Executes a request with retry logic for handling transient failures.
-    /// </summary>
-    private async Task<TResponse> ExecuteRequestWithRetryAsync<TResponse>(OrganizationRequest request)
-        where TResponse : OrganizationResponse
-    {
-        int maxRetries = _options.RetryAttempts;
-        int currentAttempt = 0;
-
-        while (currentAttempt <= maxRetries)
-        {
-            try
-            {
-                OrganizationResponse? response = await Task.Run(() => _serviceClient.Execute(request));
-                return (TResponse)response;
-            }
-            catch (Exception ex) when (currentAttempt < maxRetries && DataverseUtilities.IsTransientException(ex))
-            {
-                currentAttempt++;
-                int retryDelay = DataverseUtilities.CalculateRetryDelay(currentAttempt, _options.RetryDelayMs);
-
-                _logger.LogWarning(ex,
-                    "Request failed with transient error on attempt {Attempt}/{MaxAttempts}. Retrying in {Delay}ms",
-                    currentAttempt, maxRetries + 1, retryDelay);
-
-                await Task.Delay(retryDelay);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Request failed on attempt {Attempt}/{MaxAttempts} with non-transient error",
-                    currentAttempt + 1, maxRetries + 1);
-                throw;
-            }
-        }
-
-        throw new DataverseException(
-            DataverseConstants.ErrorCodes.Timeout,
-            $"Request failed after {maxRetries + 1} attempts");
-    }
 
     /// <summary>
     /// Validates individual columns to identify specific missing columns.
