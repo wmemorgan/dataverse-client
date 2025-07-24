@@ -64,20 +64,20 @@ public class ConsoleUserInterface : IUserInterface
         double batchRate = recordCount / batchTime.TotalSeconds;
         double improvement = ((individualTime.TotalMilliseconds / batchTime.TotalMilliseconds) - 1) * 100;
 
-        table.AddRow("Individual Operations", 
-                    individualTime.ToString(@"mm\:ss\.fff"), 
-                    $"{individualRate:F2}",
-                    "Baseline");
-        
-        table.AddRow("Batch Operations", 
-                    batchTime.ToString(@"mm\:ss\.fff"), 
-                    $"{batchRate:F2}",
-                    $"[green]{improvement:F1}% faster[/]");
+        table.AddRow("Individual Operations",
+            individualTime.ToString(@"mm\:ss\.fff"),
+            $"{individualRate:F2}",
+            "Baseline");
+
+        table.AddRow("Batch Operations",
+            batchTime.ToString(@"mm\:ss\.fff"),
+            $"{batchRate:F2}",
+            $"[green]{improvement:F1}% faster[/]");
 
         AnsiConsole.Write(table);
 
         AnsiConsole.MarkupLine($"\n[bold]Summary:[/] Batch operations were [green]{improvement:F1}% faster[/] " +
-                              $"than individual operations for {recordCount} records.");
+                               $"than individual operations for {recordCount} records.");
     }
 
     public void DisplayBatchSizeComparison(List<(int BatchSize, TimeSpan Duration, int SuccessCount)> results)
@@ -89,22 +89,23 @@ public class ConsoleUserInterface : IUserInterface
             .AddColumn("Records/Second")
             .AddColumn("Success Count");
 
-        foreach (var result in results)
+        foreach ((int BatchSize, TimeSpan Duration, int SuccessCount) in results)
         {
-            double rate = result.SuccessCount / result.Duration.TotalSeconds;
-            
-            table.AddRow(result.BatchSize.ToString(),
-                        result.Duration.ToString(@"mm\:ss\.fff"),
-                        $"{rate:F2}",
-                        result.SuccessCount.ToString("N0"));
+            double rate = SuccessCount / Duration.TotalSeconds;
+
+            table.AddRow(BatchSize.ToString(),
+                Duration.ToString(@"mm\:ss\.fff"),
+                $"{rate:F2}",
+                SuccessCount.ToString("N0"));
         }
 
         AnsiConsole.Write(table);
 
         // Find the best performing batch size
-        var bestResult = results.OrderByDescending(r => r.SuccessCount / r.Duration.TotalSeconds).First();
+        (int BatchSize, TimeSpan Duration, int SuccessCount) bestResult =
+            results.OrderByDescending(r => r.SuccessCount / r.Duration.TotalSeconds).First();
         AnsiConsole.MarkupLine($"\n[bold]Optimal Batch Size:[/] [green]{bestResult.BatchSize}[/] " +
-                              $"({bestResult.SuccessCount / bestResult.Duration.TotalSeconds:F2} records/second)");
+                               $"({bestResult.SuccessCount / bestResult.Duration.TotalSeconds:F2} records/second)");
     }
 
     public void DisplayConcurrentOperationResults(BatchOperationResult[] results, TimeSpan totalTime)
@@ -121,14 +122,14 @@ public class ConsoleUserInterface : IUserInterface
 
         for (int i = 0; i < results.Length; i++)
         {
-            var result = results[i];
+            BatchOperationResult result = results[i];
             totalSuccessful += result.SuccessCount;
             totalFailed += result.FailureCount;
 
             table.AddRow((i + 1).ToString(),
-                        result.SuccessCount.ToString("N0"),
-                        result.FailureCount > 0 ? $"[red]{result.FailureCount:N0}[/]" : "0",
-                        $"{result.SuccessRate:F1}%");
+                result.SuccessCount.ToString("N0"),
+                result.FailureCount > 0 ? $"[red]{result.FailureCount:N0}[/]" : "0",
+                $"{result.SuccessRate:F1}%");
         }
 
         AnsiConsole.Write(table);
@@ -137,7 +138,8 @@ public class ConsoleUserInterface : IUserInterface
         double overallSuccessRate = totalSuccessful / (double)(totalSuccessful + totalFailed) * 100;
 
         AnsiConsole.MarkupLine($"\n[bold]Overall Results:[/]");
-        AnsiConsole.MarkupLine($"• Total Records: [green]{totalSuccessful:N0}[/] successful, [red]{totalFailed:N0}[/] failed");
+        AnsiConsole.MarkupLine(
+            $"• Total Records: [green]{totalSuccessful:N0}[/] successful, [red]{totalFailed:N0}[/] failed");
         AnsiConsole.MarkupLine($"• Success Rate: [green]{overallSuccessRate:F1}%[/]");
         AnsiConsole.MarkupLine($"• Total Duration: {totalTime:mm\\:ss\\.fff}");
         AnsiConsole.MarkupLine($"• Overall Rate: [green]{overallRate:F2} records/second[/]");
@@ -167,25 +169,13 @@ public class ConsoleUserInterface : IUserInterface
         AnsiConsole.WriteLine();
     }
 
-    public void ShowInfo(string message)
-    {
-        AnsiConsole.MarkupLine($"[cyan]ℹ {message}[/]");
-    }
+    public void ShowInfo(string message) => AnsiConsole.MarkupLine($"[cyan]ℹ {message}[/]");
 
-    public void ShowSuccess(string message)
-    {
-        AnsiConsole.MarkupLine($"[green]✅ {message}[/]");
-    }
+    public void ShowSuccess(string message) => AnsiConsole.MarkupLine($"[green]✅ {message}[/]");
 
-    public void ShowWarning(string message)
-    {
-        AnsiConsole.MarkupLine($"[yellow]⚠ {message}[/]");
-    }
+    public void ShowWarning(string message) => AnsiConsole.MarkupLine($"[yellow]⚠ {message}[/]");
 
-    public void ShowError(string message)
-    {
-        AnsiConsole.MarkupLine($"[red]❌ {message}[/]");
-    }
+    public void ShowError(string message) => AnsiConsole.MarkupLine($"[red]❌ {message}[/]");
 
     public void PauseForUser()
     {
@@ -194,9 +184,8 @@ public class ConsoleUserInterface : IUserInterface
         Console.ReadKey(true);
     }
 
-    public async Task<bool> TestConnectionAsync(IDataverseClient client)
-    {
-        return await AnsiConsole.Status()
+    public async Task<bool> TestConnectionAsync(IDataverseClient client) =>
+        await AnsiConsole.Status()
             .StartAsync("Testing Dataverse connection...", async ctx =>
             {
                 ctx.Spinner(Spinner.Known.Dots);
@@ -213,7 +202,6 @@ public class ConsoleUserInterface : IUserInterface
                     return false;
                 }
             });
-    }
 
     public void DisplayConnectionInfo(ConnectionInfo connectionInfo)
     {
@@ -253,23 +241,23 @@ public class ConsoleUserInterface : IUserInterface
 
     public CrudOptions GetCrudOptions()
     {
-        var entityType = AnsiConsole.Prompt(
+        EntityType entityType = AnsiConsole.Prompt(
             new SelectionPrompt<EntityType>()
                 .Title("Choose entity type for CRUD operations:")
                 .AddChoices(EntityType.CustomTable, EntityType.Contact));
 
-        var recordCount = AnsiConsole.Prompt(
+        int recordCount = AnsiConsole.Prompt(
             new TextPrompt<int>("Number of records to create:")
                 .DefaultValue(5)
                 .Validate(count => count is > 0 and <= 50
                     ? SpectreValidationResult.Success()
                     : SpectreValidationResult.Error("Must be between 1 and 50")));
 
-        var includeCreate = AnsiConsole.Confirm("Include Create operations?", true);
-        var includeRetrieve = AnsiConsole.Confirm("Include Retrieve operations?", true);
-        var includeUpdate = AnsiConsole.Confirm("Include Update operations?", true);
-        var includeDelete = AnsiConsole.Confirm("Include Delete operations?", false);
-        var cleanupAfter = AnsiConsole.Confirm("Cleanup records after demo?", true);
+        bool includeCreate = AnsiConsole.Confirm("Include Create operations?", true);
+        bool includeRetrieve = AnsiConsole.Confirm("Include Retrieve operations?", true);
+        bool includeUpdate = AnsiConsole.Confirm("Include Update operations?", true);
+        bool includeDelete = AnsiConsole.Confirm("Include Delete operations?", false);
+        bool cleanupAfter = AnsiConsole.Confirm("Cleanup records after demo?", true);
 
         TableCleanupOption tableCleanupOption = TableCleanupOption.RecordsOnly;
         if (cleanupAfter && entityType == EntityType.CustomTable)
@@ -304,27 +292,27 @@ public class ConsoleUserInterface : IUserInterface
 
     public BatchOptions GetBatchOptions()
     {
-        var entityType = AnsiConsole.Prompt(
+        EntityType entityType = AnsiConsole.Prompt(
             new SelectionPrompt<EntityType>()
                 .Title("Choose entity type for batch operations:")
                 .AddChoices(EntityType.CustomTable, EntityType.Contact));
 
-        var recordCount = AnsiConsole.Prompt(
+        int recordCount = AnsiConsole.Prompt(
             new TextPrompt<int>("Number of records for batch operations:")
                 .DefaultValue(100)
                 .Validate(count => count is > 0 and <= 1000
                     ? SpectreValidationResult.Success()
                     : SpectreValidationResult.Error("Must be between 1 and 1000")));
 
-        var batchSize = AnsiConsole.Prompt(
+        int batchSize = AnsiConsole.Prompt(
             new TextPrompt<int>("Batch size:")
                 .DefaultValue(50)
                 .Validate(size => size is > 0 and <= 200
                     ? SpectreValidationResult.Success()
                     : SpectreValidationResult.Error("Must be between 1 and 200")));
 
-        var enableProgressReporting = AnsiConsole.Confirm("Enable progress reporting?", recordCount > 50);
-        var cleanupAfter = AnsiConsole.Confirm("Cleanup records after demo?", true);
+        bool enableProgressReporting = AnsiConsole.Confirm("Enable progress reporting?", recordCount > 50);
+        bool cleanupAfter = AnsiConsole.Confirm("Cleanup records after demo?", true);
 
         TableCleanupOption tableCleanupOption = TableCleanupOption.RecordsOnly;
         if (cleanupAfter && entityType == EntityType.CustomTable)
@@ -357,7 +345,7 @@ public class ConsoleUserInterface : IUserInterface
 
     public TableManagementOptions GetTableManagementOptions()
     {
-        var operation = AnsiConsole.Prompt(
+        TableOperation operation = AnsiConsole.Prompt(
             new SelectionPrompt<TableOperation>()
                 .Title("Choose table management operation:")
                 .AddChoices([
@@ -373,65 +361,55 @@ public class ConsoleUserInterface : IUserInterface
             tableName = AnsiConsole.Prompt(
                 new TextPrompt<string>("Enter table name:")
                     .DefaultValue("contact")
-                    .Validate(name => !string.IsNullOrWhiteSpace(name) 
-                        ? SpectreValidationResult.Success() 
+                    .Validate(name => !string.IsNullOrWhiteSpace(name)
+                        ? SpectreValidationResult.Success()
                         : SpectreValidationResult.Error("Table name cannot be empty")));
         }
 
-        return new TableManagementOptions
-        {
-            Operation = operation,
-            TableName = tableName
-        };
+        return new TableManagementOptions { Operation = operation, TableName = tableName };
     }
 
     public QueryOptions GetQueryOptions()
     {
-        var entityName = AnsiConsole.Prompt(
+        string entityName = AnsiConsole.Prompt(
             new TextPrompt<string>("Enter entity name to query:")
                 .DefaultValue("contact")
-                .Validate(name => !string.IsNullOrWhiteSpace(name) 
-                    ? SpectreValidationResult.Success() 
+                .Validate(name => !string.IsNullOrWhiteSpace(name)
+                    ? SpectreValidationResult.Success()
                     : SpectreValidationResult.Error("Entity name cannot be empty")));
 
-        var queryType = AnsiConsole.Prompt(
+        QueryType queryType = AnsiConsole.Prompt(
             new SelectionPrompt<QueryType>()
                 .Title("Choose query type:")
                 .AddChoices(QueryType.QueryExpression, QueryType.FetchXml, QueryType.Both));
 
-        return new QueryOptions
-        {
-            EntityName = entityName,
-            QueryType = queryType
-        };
+        return new QueryOptions { EntityName = entityName, QueryType = queryType };
     }
 
     public ValidationOptions GetValidationOptions()
     {
-        var tableName = AnsiConsole.Prompt(
+        string tableName = AnsiConsole.Prompt(
             new TextPrompt<string>("Enter table name to validate:")
                 .DefaultValue("contact")
-                .Validate(name => !string.IsNullOrWhiteSpace(name) 
-                    ? SpectreValidationResult.Success() 
+                .Validate(name => !string.IsNullOrWhiteSpace(name)
+                    ? SpectreValidationResult.Success()
                     : SpectreValidationResult.Error("Table name cannot be empty")));
 
-        var validateTableAccess = AnsiConsole.Confirm("Validate table access?", true);
-        var validateConnection = AnsiConsole.Confirm("Validate connection?", true);
-        
+        bool validateTableAccess = AnsiConsole.Confirm("Validate table access?", true);
+        bool validateConnection = AnsiConsole.Confirm("Validate connection?", true);
+
         bool validateSchema = AnsiConsole.Confirm("Validate schema (check specific columns)?", false);
         string[]? expectedColumns = null;
 
         if (validateSchema)
         {
-            var columnsInput = AnsiConsole.Prompt(
+            string columnsInput = AnsiConsole.Prompt(
                 new TextPrompt<string>("Enter expected column names (comma-separated):")
                     .DefaultValue("firstname,lastname,emailaddress1")
                     .AllowEmpty());
 
             if (!string.IsNullOrWhiteSpace(columnsInput))
-            {
-                expectedColumns = columnsInput.Split(',').Select(c => c.Trim()).ToArray();
-            }
+                expectedColumns = [.. columnsInput.Split(',').Select(c => c.Trim())];
         }
 
         return new ValidationOptions
@@ -446,7 +424,7 @@ public class ConsoleUserInterface : IUserInterface
 
     public PerformanceOptions GetPerformanceOptions()
     {
-        var testType = AnsiConsole.Prompt(
+        PerformanceTestType testType = AnsiConsole.Prompt(
             new SelectionPrompt<PerformanceTestType>()
                 .Title("Choose performance test type:")
                 .AddChoices([
@@ -455,26 +433,21 @@ public class ConsoleUserInterface : IUserInterface
                     PerformanceTestType.ConcurrentOperations
                 ]));
 
-        var recordCount = AnsiConsole.Prompt(
+        int recordCount = AnsiConsole.Prompt(
             new TextPrompt<int>("Number of records for performance testing:")
                 .DefaultValue(200)
-                .Validate(count => count is > 0 and <= 2000 
-                    ? SpectreValidationResult.Success() 
+                .Validate(count => count is > 0 and <= 2000
+                    ? SpectreValidationResult.Success()
                     : SpectreValidationResult.Error("Must be between 1 and 2000")));
 
-        var batchSize = AnsiConsole.Prompt(
+        int batchSize = AnsiConsole.Prompt(
             new TextPrompt<int>("Batch size:")
                 .DefaultValue(100)
-                .Validate(size => size is > 0 and <= 500 
-                    ? SpectreValidationResult.Success() 
+                .Validate(size => size is > 0 and <= 500
+                    ? SpectreValidationResult.Success()
                     : SpectreValidationResult.Error("Must be between 1 and 500")));
 
-        return new PerformanceOptions
-        {
-            TestType = testType,
-            RecordCount = recordCount,
-            BatchSize = batchSize
-        };
+        return new PerformanceOptions { TestType = testType, RecordCount = recordCount, BatchSize = batchSize };
     }
 
     public void DisplayEntityRecord(Entity entity, string entityName)
@@ -484,12 +457,12 @@ public class ConsoleUserInterface : IUserInterface
             .AddColumn("Field")
             .AddColumn("Value");
 
-        foreach (var attribute in entity.Attributes.Take(10)) // Limit to first 10 attributes
+        foreach (KeyValuePair<string, object> attribute in entity.Attributes.Take(10)) // Limit to first 10 attributes
         {
             string value = attribute.Value?.ToString() ?? "";
             if (value.Length > 50)
                 value = value[..47] + "...";
-            
+
             table.AddRow(attribute.Key, value);
         }
 
@@ -542,11 +515,9 @@ public class ConsoleUserInterface : IUserInterface
         AnsiConsole.Write(table);
     }
 
-    public void DisplayBatchProgress(BatchProgress progress)
-    {
+    public void DisplayBatchProgress(BatchProgress progress) =>
         AnsiConsole.MarkupLine($"[cyan]Progress: {progress.FormattedProgress} | {progress.FormattedBatchProgress} | " +
-                              $"Rate: {progress.CurrentRate:F1}/sec | ETA: {progress.FormattedTimeRemaining}[/]");
-    }
+                               $"Rate: {progress.CurrentRate:F1}/sec | ETA: {progress.FormattedTimeRemaining}[/]");
 
     public void DisplayTableMetadata(TableMetadata metadata)
     {
@@ -570,11 +541,8 @@ public class ConsoleUserInterface : IUserInterface
         if (metadata.ColumnNames.Count > 0)
         {
             AnsiConsole.MarkupLine("\n[bold]Columns:[/]");
-            foreach (string columnName in metadata.ColumnNames.Take(10))
-            {
-                AnsiConsole.MarkupLine($"• {columnName}");
-            }
-            
+            foreach (string columnName in metadata.ColumnNames.Take(10)) AnsiConsole.MarkupLine($"• {columnName}");
+
             if (metadata.ColumnNames.Count > 10)
                 AnsiConsole.MarkupLine($"[dim]... and {metadata.ColumnNames.Count - 10} more columns[/]");
         }

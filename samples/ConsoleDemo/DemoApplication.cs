@@ -7,62 +7,46 @@ namespace ConsoleDemo;
 /// <summary>
 /// Main application class that orchestrates the demo workflow.
 /// </summary>
-public class DemoApplication
+public class DemoApplication(
+    IDataverseClient dataverseClient,
+    IDataverseOperations dataverseOperations,
+    IUserInterface userInterface,
+    ILogger<DemoApplication> logger)
 {
-    private readonly IDataverseClient _dataverseClient;
-    private readonly IDataverseMetadataClient _metadataClient;
-    private readonly IDataverseOperations _dataverseOperations;
-    private readonly IUserInterface _userInterface;
-    private readonly ILogger<DemoApplication> _logger;
-
-    public DemoApplication(
-        IDataverseClient dataverseClient,
-        IDataverseMetadataClient metadataClient,
-        IDataverseOperations dataverseOperations,
-        IUserInterface userInterface,
-        ILogger<DemoApplication> logger)
-    {
-        _dataverseClient = dataverseClient;
-        _metadataClient = metadataClient;
-        _dataverseOperations = dataverseOperations;
-        _userInterface = userInterface;
-        _logger = logger;
-    }
-
     /// <summary>
     /// Runs the main demo application workflow.
     /// </summary>
     public async Task RunAsync()
     {
-        _userInterface.ShowWelcome();
+        userInterface.ShowWelcome();
 
         try
         {
             // Test connection
-            if (!await _userInterface.TestConnectionAsync(_dataverseClient))
+            if (!await userInterface.TestConnectionAsync(dataverseClient))
             {
-                _userInterface.ShowError("Failed to connect to Dataverse. Please check your configuration.");
+                userInterface.ShowError("Failed to connect to Dataverse. Please check your configuration.");
                 return;
             }
 
             // Display connection info
-            ConnectionInfo connectionInfo = _dataverseClient.GetConnectionInfo();
-            _userInterface.DisplayConnectionInfo(connectionInfo);
+            ConnectionInfo connectionInfo = dataverseClient.GetConnectionInfo();
+            userInterface.DisplayConnectionInfo(connectionInfo);
 
             // Main menu loop
             bool continueRunning = true;
             while (continueRunning)
             {
-                DemoOption selectedOption = _userInterface.ShowMainMenu();
+                DemoOption selectedOption = userInterface.ShowMainMenu();
                 continueRunning = await HandleMenuSelectionAsync(selectedOption);
             }
 
-            _userInterface.ShowSuccess("Demo completed successfully!");
+            userInterface.ShowSuccess("Demo completed successfully!");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Demo application encountered an error");
-            _userInterface.ShowError($"Application error: {ex.Message}");
+            logger.LogError(ex, "Demo application encountered an error");
+            userInterface.ShowError($"Application error: {ex.Message}");
         }
     }
 
@@ -103,17 +87,17 @@ public class DemoApplication
                     return false;
 
                 default:
-                    _userInterface.ShowWarning("Invalid option selected.");
+                    userInterface.ShowWarning("Invalid option selected.");
                     break;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error handling menu selection: {Option}", option);
-            _userInterface.ShowError($"Operation failed: {ex.Message}");
+            logger.LogError(ex, "Error handling menu selection: {Option}", option);
+            userInterface.ShowError($"Operation failed: {ex.Message}");
         }
 
-        _userInterface.PauseForUser();
+        userInterface.PauseForUser();
         return true;
     }
 
@@ -122,17 +106,17 @@ public class DemoApplication
     /// </summary>
     private async Task RunBasicCrudDemoAsync()
     {
-        _userInterface.ShowSectionHeader("Basic CRUD Operations Demo");
+        userInterface.ShowSectionHeader("Basic CRUD Operations Demo");
 
-        var crudOptions = _userInterface.GetCrudOptions();
-        
+        CrudOptions crudOptions = userInterface.GetCrudOptions();
+
         switch (crudOptions.EntityType)
         {
             case EntityType.CustomTable:
-                await _dataverseOperations.DemonstrateCustomTableCrudAsync(crudOptions);
+                await dataverseOperations.DemonstrateCustomTableCrudAsync(crudOptions);
                 break;
             case EntityType.Contact:
-                await _dataverseOperations.DemonstrateContactCrudAsync(crudOptions);
+                await dataverseOperations.DemonstrateContactCrudAsync(crudOptions);
                 break;
         }
     }
@@ -142,17 +126,17 @@ public class DemoApplication
     /// </summary>
     private async Task RunBatchOperationsDemoAsync()
     {
-        _userInterface.ShowSectionHeader("Batch Operations Demo");
+        userInterface.ShowSectionHeader("Batch Operations Demo");
 
-        var batchOptions = _userInterface.GetBatchOptions();
-        
+        BatchOptions batchOptions = userInterface.GetBatchOptions();
+
         switch (batchOptions.EntityType)
         {
             case EntityType.CustomTable:
-                await _dataverseOperations.DemonstrateBatchOperationsAsync(batchOptions);
+                await dataverseOperations.DemonstrateBatchOperationsAsync(batchOptions);
                 break;
             case EntityType.Contact:
-                await _dataverseOperations.DemonstrateContactBatchOperationsAsync(batchOptions);
+                await dataverseOperations.DemonstrateContactBatchOperationsAsync(batchOptions);
                 break;
         }
     }
@@ -162,10 +146,10 @@ public class DemoApplication
     /// </summary>
     private async Task RunTableManagementDemoAsync()
     {
-        _userInterface.ShowSectionHeader("Table Management Demo");
+        userInterface.ShowSectionHeader("Table Management Demo");
 
-        var tableOptions = _userInterface.GetTableManagementOptions();
-        await _dataverseOperations.DemonstrateTableManagementAsync(tableOptions);
+        TableManagementOptions tableOptions = userInterface.GetTableManagementOptions();
+        await dataverseOperations.DemonstrateTableManagementAsync(tableOptions);
     }
 
     /// <summary>
@@ -173,10 +157,10 @@ public class DemoApplication
     /// </summary>
     private async Task RunQueryOperationsDemoAsync()
     {
-        _userInterface.ShowSectionHeader("Query Operations Demo");
+        userInterface.ShowSectionHeader("Query Operations Demo");
 
-        var queryOptions = _userInterface.GetQueryOptions();
-        await _dataverseOperations.DemonstrateQueryOperationsAsync(queryOptions);
+        QueryOptions queryOptions = userInterface.GetQueryOptions();
+        await dataverseOperations.DemonstrateQueryOperationsAsync(queryOptions);
     }
 
     /// <summary>
@@ -184,10 +168,10 @@ public class DemoApplication
     /// </summary>
     private async Task RunValidationOperationsDemoAsync()
     {
-        _userInterface.ShowSectionHeader("Validation Operations Demo");
+        userInterface.ShowSectionHeader("Validation Operations Demo");
 
-        var validationOptions = _userInterface.GetValidationOptions();
-        await _dataverseOperations.DemonstrateValidationOperationsAsync(validationOptions);
+        ValidationOptions validationOptions = userInterface.GetValidationOptions();
+        await dataverseOperations.DemonstrateValidationOperationsAsync(validationOptions);
     }
 
     /// <summary>
@@ -195,9 +179,9 @@ public class DemoApplication
     /// </summary>
     private async Task RunPerformanceTestingAsync()
     {
-        _userInterface.ShowSectionHeader("Performance Testing Demo");
+        userInterface.ShowSectionHeader("Performance Testing Demo");
 
-        var performanceOptions = _userInterface.GetPerformanceOptions();
-        await _dataverseOperations.DemonstratePerformanceTestingAsync(performanceOptions);
+        PerformanceOptions performanceOptions = userInterface.GetPerformanceOptions();
+        await dataverseOperations.DemonstratePerformanceTestingAsync(performanceOptions);
     }
 }
