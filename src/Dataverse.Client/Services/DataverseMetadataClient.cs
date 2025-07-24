@@ -19,6 +19,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
 
     private readonly ServiceClient _serviceClient;
     private readonly ILogger<DataverseMetadataClient> _logger;
+    private readonly DataverseClientOptions _options;
     private bool _disposed;
 
     #endregion
@@ -38,6 +39,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
         ArgumentNullException.ThrowIfNull(logger, nameof(logger));
 
         _serviceClient = serviceClient;
+        _options = options.Value;
         _logger = logger;
 
         _logger.LogInformation("DataverseMetadataClient initialized with connection to {OrganizationUri}",
@@ -101,7 +103,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
                 Entity = entityMetadata, PrimaryAttribute = primaryAttribute
             };
 
-            CreateEntityResponse createEntityResponse = (CreateEntityResponse)_serviceClient.Execute(createEntityRequest);
+            CreateEntityResponse createEntityResponse = (CreateEntityResponse)await _serviceClient.ExecuteAsync(createEntityRequest);
 
             _logger.LogInformation("Table '{TableName}' created successfully with ID {EntityId}",
                 tableDefinition.LogicalName, createEntityResponse.EntityId);
@@ -140,7 +142,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
 
             DeleteEntityRequest deleteEntityRequest = new() { LogicalName = logicalName };
 
-            _serviceClient.Execute(deleteEntityRequest);
+            await _serviceClient.ExecuteAsync(deleteEntityRequest);
 
             _logger.LogInformation("Table '{TableName}' deleted successfully", logicalName);
         }
@@ -168,7 +170,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
                 EntityFilters = EntityFilters.Entity
             };
 
-            // Execute directly without Task.Run to allow proper exception handling
+            // Use the async version for better performance and non-blocking execution
             await _serviceClient.ExecuteAsync(retrieveEntityRequest);
 
             _logger.LogDebug("Table '{TableName}' exists", logicalName);
@@ -203,6 +205,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
 
             // Check for common "entity not found" patterns
             return message.Contains("Could not find an entity", StringComparison.OrdinalIgnoreCase) ||
+                   message.Contains("was not found in the MetadataCache", StringComparison.OrdinalIgnoreCase) ||
                    message.Contains("40850685") ||  // Known error code for entity not found
                    message.Contains("40988325") ||  // Known error code for entity not found (from your error)
                    message.Contains("Entity not found", StringComparison.OrdinalIgnoreCase) ||
@@ -247,7 +250,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
                 EntityFilters = EntityFilters.Entity | EntityFilters.Attributes
             };
 
-            RetrieveEntityResponse response = (RetrieveEntityResponse)_serviceClient.Execute(retrieveEntityRequest);
+            RetrieveEntityResponse response = (RetrieveEntityResponse)await _serviceClient.ExecuteAsync(retrieveEntityRequest);
 
             EntityMetadata entityMetadata = response.EntityMetadata;
 

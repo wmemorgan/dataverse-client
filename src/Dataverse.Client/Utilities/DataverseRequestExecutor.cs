@@ -40,7 +40,8 @@ public static class DataverseRequestExecutor
         {
             try
             {
-                OrganizationResponse? response = await Task.Run(() => serviceClient.Execute(request));
+                // Execute directly without Task.Run to allow proper exception handling
+                OrganizationResponse? response = serviceClient.Execute(request);
                 return (TResponse)response;
             }
             catch (Exception ex) when (currentAttempt < maxRetries && DataverseUtilities.IsTransientException(ex))
