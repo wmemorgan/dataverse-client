@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Dataverse.Client.Interfaces;
 using Dataverse.Client.Models;
 using Dataverse.Samples.Common;
@@ -27,61 +26,87 @@ public interface IDataverseOperations
 /// <summary>
 /// Implements core Dataverse operations for the demo application.
 /// </summary>
-public class DataverseOperations(
-    IDataverseClient dataverseClient,
-    IDataverseMetadataClient metadataClient,
-    IUserInterface userInterface,
-    ILogger<DataverseOperations> logger)
-    : IDataverseOperations
+public class DataverseOperations : IDataverseOperations
 {
+    private readonly IDataverseClient _dataverseClient;
+    private readonly IDataverseMetadataClient _metadataClient;
+    private readonly IUserInterface _userInterface;
+    private readonly ILogger<DataverseOperations> _logger;
+
     private string? _testTableName;
     private readonly List<Guid> _createdRecordIds = [];
+
+    public DataverseOperations(
+        IDataverseClient dataverseClient,
+        IDataverseMetadataClient metadataClient,
+        IUserInterface userInterface,
+        ILogger<DataverseOperations> logger)
+    {
+        _dataverseClient = dataverseClient;
+        _metadataClient = metadataClient;
+        _userInterface = userInterface;
+        _logger = logger;
+    }
 
     #region CRUD Operations
 
     public async Task DemonstrateCustomTableCrudAsync(CrudOptions options)
     {
-        userInterface.ShowInfo("Demonstrating Custom Table CRUD Operations");
+        _userInterface.ShowInfo("Demonstrating Custom Table CRUD Operations");
 
         try
         {
             // Create test table if not exists
-            _testTableName = await SampleDataGenerator.CreateTestTableAsync(metadataClient);
-            userInterface.ShowSuccess($"Test table '{_testTableName}' is ready");
+            _testTableName = await SampleDataGenerator.CreateTestTableAsync(_metadataClient);
+            _userInterface.ShowSuccess($"Test table '{_testTableName}' is ready");
 
             // Create records
-            if (options.IncludeCreate) await CreateTestRecordsAsync(options.RecordCount);
+            if (options.IncludeCreate)
+            {
+                await CreateTestRecordsAsync(options.RecordCount);
+            }
 
             // Retrieve records
-            if (options.IncludeRetrieve && _createdRecordIds.Count > 0) await RetrieveTestRecordsAsync();
+            if (options.IncludeRetrieve && _createdRecordIds.Count > 0)
+            {
+                await RetrieveTestRecordsAsync();
+            }
 
             // Update records
-            if (options.IncludeUpdate && _createdRecordIds.Count > 0) await UpdateTestRecordsAsync();
-
-            // Delete records and optionally table
-            if (options.IncludeDelete ||
-                (options.CleanupAfter && options.TableCleanupOption != TableCleanupOption.None))
+            if (options.IncludeUpdate && _createdRecordIds.Count > 0)
             {
-                await HandleCustomTableCleanupAsync(options.TableCleanupOption, options.CleanupAfter);
+                await UpdateTestRecordsAsync();
+            }
+
+            // Delete records (individual operations for CRUD demo)
+            if (options.IncludeDelete && _createdRecordIds.Count > 0)
+            {
+                await DeleteTestRecordsIndividuallyAsync();
+            }
+
+            // Handle cleanup based on options
+            if (options.CleanupAfter && options.TableCleanupOption != TableCleanupOption.None)
+            {
+                await HandleCustomTableCleanupAsync(options.TableCleanupOption, options.CleanupAfter, useIndividualDeletes: true);
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Custom table CRUD demonstration failed");
-            userInterface.ShowError($"Custom table CRUD operations failed: {ex.Message}");
+            _logger.LogError(ex, "Custom table CRUD demonstration failed");
+            _userInterface.ShowError($"Custom table CRUD operations failed: {ex.Message}");
         }
     }
 
     public async Task DemonstrateContactCrudAsync(CrudOptions options)
     {
-        userInterface.ShowInfo("Demonstrating Contact Entity CRUD Operations");
+        _userInterface.ShowInfo("Demonstrating Contact Entity CRUD Operations");
 
         // First validate access to Contact entity
-        DataverseValidationResult validation = await dataverseClient.ValidateTableAccessAsync("contact");
+        DataverseValidationResult validation = await _dataverseClient.ValidateTableAccessAsync("contact");
         if (!validation.IsValid)
         {
-            userInterface.ShowError("Contact entity is not accessible in this environment");
-            userInterface.DisplayValidationResult(validation);
+            _userInterface.ShowError("Contact entity is not accessible in this environment");
+            _userInterface.DisplayValidationResult(validation);
             return;
         }
 
@@ -90,22 +115,39 @@ public class DataverseOperations(
             List<Guid> contactIds = [];
 
             // Create contacts
-            if (options.IncludeCreate) contactIds = await CreateTestContactsAsync(options.RecordCount);
+            if (options.IncludeCreate)
+            {
+                contactIds = await CreateTestContactsAsync(options.RecordCount);
+            }
 
             // Retrieve contacts
-            if (options.IncludeRetrieve && contactIds.Count > 0) await RetrieveTestContactsAsync(contactIds);
+            if (options.IncludeRetrieve && contactIds.Count > 0)
+            {
+                await RetrieveTestContactsAsync(contactIds);
+            }
 
             // Update contacts
-            if (options.IncludeUpdate && contactIds.Count > 0) await UpdateTestContactsAsync(contactIds);
+            if (options.IncludeUpdate && contactIds.Count > 0)
+            {
+                await UpdateTestContactsAsync(contactIds);
+            }
 
-            // Delete contacts
-            if (options.IncludeDelete && options.CleanupAfter && contactIds.Count > 0)
-                await DeleteTestContactsAsync(contactIds);
+            // Delete contacts (individual operations for CRUD demo)
+            if (options.IncludeDelete && contactIds.Count > 0)
+            {
+                await DeleteTestContactsIndividuallyAsync(contactIds);
+            }
+
+            // Cleanup remaining contacts (individual operations for CRUD demo)
+            if (options.CleanupAfter && contactIds.Count > 0)
+            {
+                await DeleteTestContactsIndividuallyAsync(contactIds);
+            }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Contact CRUD demonstration failed");
-            userInterface.ShowError($"Contact CRUD operations failed: {ex.Message}");
+            _logger.LogError(ex, "Contact CRUD demonstration failed");
+            _userInterface.ShowError($"Contact CRUD operations failed: {ex.Message}");
         }
     }
 
@@ -115,12 +157,12 @@ public class DataverseOperations(
 
     public async Task DemonstrateBatchOperationsAsync(BatchOptions options)
     {
-        userInterface.ShowInfo($"Demonstrating Batch Operations with {options.RecordCount} records");
+        _userInterface.ShowInfo($"Demonstrating Batch Operations with {options.RecordCount} records");
 
         try
         {
             // Create test table
-            _testTableName = await SampleDataGenerator.CreateTestTableAsync(metadataClient);
+            _testTableName = await SampleDataGenerator.CreateTestTableAsync(_metadataClient);
 
             // Create batch configuration
             BatchConfiguration batchConfig = new()
@@ -133,38 +175,52 @@ public class DataverseOperations(
             if (options.EnableProgressReporting)
             {
                 batchConfig.ProgressReporter = new Progress<BatchProgress>(progress =>
-                    userInterface.DisplayBatchProgress(progress));
+                    _userInterface.DisplayBatchProgress(progress));
             }
 
             // Test batch create
             await TestBatchCreateAsync(options.RecordCount, batchConfig);
 
             // Test batch retrieve
-            if (_createdRecordIds.Count > 0) await TestBatchRetrieveAsync(batchConfig);
+            if (_createdRecordIds.Count > 0)
+            {
+                await TestBatchRetrieveAsync(batchConfig);
+            }
 
             // Test batch update
-            if (_createdRecordIds.Count > 0) await TestBatchUpdateAsync(batchConfig);
+            if (_createdRecordIds.Count > 0)
+            {
+                await TestBatchUpdateAsync(batchConfig);
+            }
 
-            // Handle cleanup based on options
+            // Test batch delete - THIS IS THE KEY FIX
+            if (_createdRecordIds.Count > 0)
+            {
+                await TestBatchDeleteAsync(batchConfig);
+            }
+
+            // Handle table cleanup based on options (use batch operations)
             if (options.CleanupAfter && options.TableCleanupOption != TableCleanupOption.None)
-                await HandleCustomTableCleanupAsync(options.TableCleanupOption, true);
+            {
+                await HandleCustomTableCleanupAsync(options.TableCleanupOption, true, useIndividualDeletes: false);
+            }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Batch operations demonstration failed");
-            userInterface.ShowError($"Batch operations failed: {ex.Message}");
+            _logger.LogError(ex, "Batch operations demonstration failed");
+            _userInterface.ShowError($"Batch operations failed: {ex.Message}");
         }
     }
 
     public async Task DemonstrateContactBatchOperationsAsync(BatchOptions options)
     {
-        userInterface.ShowInfo($"Demonstrating Contact Batch Operations with {options.RecordCount} records");
+        _userInterface.ShowInfo($"Demonstrating Contact Batch Operations with {options.RecordCount} records");
 
         // Validate access to Contact entity
-        DataverseValidationResult validation = await dataverseClient.ValidateTableAccessAsync("contact");
+        DataverseValidationResult validation = await _dataverseClient.ValidateTableAccessAsync("contact");
         if (!validation.IsValid)
         {
-            userInterface.ShowError("Contact entity is not accessible");
+            _userInterface.ShowError("Contact entity is not accessible");
             return;
         }
 
@@ -180,15 +236,15 @@ public class DataverseOperations(
             if (options.EnableProgressReporting)
             {
                 batchConfig.ProgressReporter = new Progress<BatchProgress>(progress =>
-                    userInterface.DisplayBatchProgress(progress));
+                    _userInterface.DisplayBatchProgress(progress));
             }
 
             await TestContactBatchOperationsAsync(options.RecordCount, batchConfig, options.CleanupAfter);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Contact batch operations demonstration failed");
-            userInterface.ShowError($"Contact batch operations failed: {ex.Message}");
+            _logger.LogError(ex, "Contact batch operations demonstration failed");
+            _userInterface.ShowError($"Contact batch operations failed: {ex.Message}");
         }
     }
 
@@ -198,7 +254,7 @@ public class DataverseOperations(
 
     public async Task DemonstrateTableManagementAsync(TableManagementOptions options)
     {
-        userInterface.ShowInfo("Demonstrating Table Management Operations");
+        _userInterface.ShowInfo("Demonstrating Table Management Operations");
 
         try
         {
@@ -214,14 +270,17 @@ public class DataverseOperations(
                     await CheckTableExistsAsync(options.TableName ?? "contact");
                     break;
                 case TableOperation.Delete:
-                    if (!string.IsNullOrEmpty(options.TableName)) await DeleteCustomTableAsync(options.TableName);
+                    if (!string.IsNullOrEmpty(options.TableName))
+                    {
+                        await DeleteCustomTableAsync(options.TableName);
+                    }
                     break;
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Table management demonstration failed");
-            userInterface.ShowError($"Table management operations failed: {ex.Message}");
+            _logger.LogError(ex, "Table management demonstration failed");
+            _userInterface.ShowError($"Table management operations failed: {ex.Message}");
         }
     }
 
@@ -231,7 +290,7 @@ public class DataverseOperations(
 
     public async Task DemonstrateQueryOperationsAsync(QueryOptions options)
     {
-        userInterface.ShowInfo($"Demonstrating Query Operations on {options.EntityName}");
+        _userInterface.ShowInfo($"Demonstrating Query Operations on {options.EntityName}");
 
         try
         {
@@ -251,8 +310,8 @@ public class DataverseOperations(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Query operations demonstration failed");
-            userInterface.ShowError($"Query operations failed: {ex.Message}");
+            _logger.LogError(ex, "Query operations demonstration failed");
+            _userInterface.ShowError($"Query operations failed: {ex.Message}");
         }
     }
 
@@ -262,37 +321,35 @@ public class DataverseOperations(
 
     public async Task DemonstrateValidationOperationsAsync(ValidationOptions options)
     {
-        userInterface.ShowInfo($"Demonstrating Validation Operations for {options.TableName}");
+        _userInterface.ShowInfo($"Demonstrating Validation Operations for {options.TableName}");
 
         try
         {
             // Test table access validation
             if (options.ValidateTableAccess)
             {
-                DataverseValidationResult accessResult =
-                    await dataverseClient.ValidateTableAccessAsync(options.TableName);
-                userInterface.DisplayValidationResult(accessResult);
+                DataverseValidationResult accessResult = await _dataverseClient.ValidateTableAccessAsync(options.TableName);
+                _userInterface.DisplayValidationResult(accessResult);
             }
 
             // Test schema validation
             if (options.ValidateSchema && options.ExpectedColumns?.Length > 0)
             {
-                DataverseValidationResult schemaResult =
-                    await dataverseClient.ValidateSchemaAsync(options.TableName, options.ExpectedColumns);
-                userInterface.DisplayValidationResult(schemaResult);
+                DataverseValidationResult schemaResult = await _dataverseClient.ValidateSchemaAsync(options.TableName, options.ExpectedColumns);
+                _userInterface.DisplayValidationResult(schemaResult);
             }
 
             // Test connection validation
             if (options.ValidateConnection)
             {
-                bool connectionValid = await dataverseClient.ValidateConnectionAsync();
-                userInterface.ShowInfo($"Connection validation result: {(connectionValid ? "Valid" : "Invalid")}");
+                bool connectionValid = await _dataverseClient.ValidateConnectionAsync();
+                _userInterface.ShowInfo($"Connection validation result: {(connectionValid ? "Valid" : "Invalid")}");
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Validation operations demonstration failed");
-            userInterface.ShowError($"Validation operations failed: {ex.Message}");
+            _logger.LogError(ex, "Validation operations demonstration failed");
+            _userInterface.ShowError($"Validation operations failed: {ex.Message}");
         }
     }
 
@@ -302,7 +359,7 @@ public class DataverseOperations(
 
     public async Task DemonstratePerformanceTestingAsync(PerformanceOptions options)
     {
-        userInterface.ShowInfo($"Running Performance Test: {options.TestType} with {options.RecordCount} records");
+        _userInterface.ShowInfo($"Running Performance Test: {options.TestType} with {options.RecordCount} records");
 
         try
         {
@@ -315,55 +372,54 @@ public class DataverseOperations(
                     await TestDifferentBatchSizesAsync(options.RecordCount, options.TableCleanupOption);
                     break;
                 case PerformanceTestType.ConcurrentOperations:
-                    await TestConcurrentOperationsAsync(options.RecordCount, options.BatchSize,
-                        options.TableCleanupOption);
+                    await TestConcurrentOperationsAsync(options.RecordCount, options.BatchSize, options.TableCleanupOption);
                     break;
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Performance testing demonstration failed");
-            userInterface.ShowError($"Performance testing failed: {ex.Message}");
+            _logger.LogError(ex, "Performance testing demonstration failed");
+            _userInterface.ShowError($"Performance testing failed: {ex.Message}");
         }
     }
 
     #endregion
 
-    #region Private Helper Methods
+    #region Private Helper Methods - Individual CRUD Operations
 
     private async Task CreateTestRecordsAsync(int count)
     {
-        userInterface.ShowInfo($"Creating {count} test records...");
+        _userInterface.ShowInfo($"Creating {count} test records individually...");
 
         for (int i = 0; i < count; i++)
         {
             Entity record = SampleDataGenerator.CreateSampleTestRecord(i + 1);
-            Guid id = await dataverseClient.CreateAsync(record);
+            Guid id = await _dataverseClient.CreateAsync(record);
             _createdRecordIds.Add(id);
         }
 
-        userInterface.ShowSuccess($"Created {count} test records");
+        _userInterface.ShowSuccess($"Created {count} test records individually");
     }
 
     private async Task RetrieveTestRecordsAsync()
     {
-        userInterface.ShowInfo("Retrieving test records...");
+        _userInterface.ShowInfo("Retrieving test records individually...");
 
         string[] columnNames = SampleDataGenerator.GetTestTableColumnNames();
         ColumnSet columns = new(columnNames);
 
         foreach (Guid recordId in _createdRecordIds.Take(3))
         {
-            Entity record = await dataverseClient.RetrieveAsync(_testTableName!, recordId, columns);
-            userInterface.DisplayEntityRecord(record, _testTableName!);
+            Entity record = await _dataverseClient.RetrieveAsync(_testTableName!, recordId, columns);
+            _userInterface.DisplayEntityRecord(record, _testTableName!);
         }
 
-        userInterface.ShowSuccess($"Retrieved {Math.Min(3, _createdRecordIds.Count)} sample records");
+        _userInterface.ShowSuccess($"Retrieved {Math.Min(3, _createdRecordIds.Count)} sample records individually");
     }
 
     private async Task UpdateTestRecordsAsync()
     {
-        userInterface.ShowInfo("Updating test records...");
+        _userInterface.ShowInfo("Updating test records individually...");
 
         foreach (Guid recordId in _createdRecordIds.Take(2))
         {
@@ -373,68 +429,69 @@ public class DataverseOperations(
                 [$"{_testTableName}_description"] = $"Updated at {DateTime.Now:yyyy-MM-dd HH:mm:ss}"
             };
 
-            await dataverseClient.UpdateAsync(updateRecord);
+            await _dataverseClient.UpdateAsync(updateRecord);
         }
 
-        userInterface.ShowSuccess($"Updated {Math.Min(2, _createdRecordIds.Count)} test records");
+        _userInterface.ShowSuccess($"Updated {Math.Min(2, _createdRecordIds.Count)} test records individually");
     }
 
-    private async Task DeleteTestRecordsAsync()
+    // Individual delete operations for CRUD demo
+    private async Task DeleteTestRecordsIndividuallyAsync()
     {
-        userInterface.ShowInfo("Deleting test records...");
+        _userInterface.ShowInfo("Deleting test records individually...");
 
         int deletedCount = 0;
         foreach (Guid recordId in _createdRecordIds.ToList())
         {
             try
             {
-                await dataverseClient.DeleteAsync(_testTableName!, recordId);
+                await _dataverseClient.DeleteAsync(_testTableName!, recordId);
                 _createdRecordIds.Remove(recordId);
                 deletedCount++;
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to delete record {RecordId}", recordId);
+                _logger.LogWarning(ex, "Failed to delete record {RecordId}", recordId);
             }
         }
 
-        userInterface.ShowSuccess($"Deleted {deletedCount} test records");
+        _userInterface.ShowSuccess($"Deleted {deletedCount} test records individually");
     }
 
     private async Task<List<Guid>> CreateTestContactsAsync(int count)
     {
-        userInterface.ShowInfo($"Creating {count} test contacts...");
+        _userInterface.ShowInfo($"Creating {count} test contacts individually...");
 
         List<Guid> contactIds = [];
         for (int i = 0; i < count; i++)
         {
             Entity contact = SampleDataGenerator.CreateSampleContact(i + 1);
-            Guid id = await dataverseClient.CreateAsync(contact);
+            Guid id = await _dataverseClient.CreateAsync(contact);
             contactIds.Add(id);
         }
 
-        userInterface.ShowSuccess($"Created {count} test contacts");
+        _userInterface.ShowSuccess($"Created {count} test contacts individually");
         return contactIds;
     }
 
     private async Task RetrieveTestContactsAsync(List<Guid> contactIds)
     {
-        userInterface.ShowInfo("Retrieving test contacts...");
+        _userInterface.ShowInfo("Retrieving test contacts individually...");
 
         ColumnSet columns = new("firstname", "lastname", "emailaddress1", "telephone1", "jobtitle");
 
         foreach (Guid contactId in contactIds.Take(3))
         {
-            Entity contact = await dataverseClient.RetrieveAsync("contact", contactId, columns);
-            userInterface.DisplayEntityRecord(contact, "contact");
+            Entity contact = await _dataverseClient.RetrieveAsync("contact", contactId, columns);
+            _userInterface.DisplayEntityRecord(contact, "contact");
         }
 
-        userInterface.ShowSuccess($"Retrieved {Math.Min(3, contactIds.Count)} sample contacts");
+        _userInterface.ShowSuccess($"Retrieved {Math.Min(3, contactIds.Count)} sample contacts individually");
     }
 
     private async Task UpdateTestContactsAsync(List<Guid> contactIds)
     {
-        userInterface.ShowInfo("Updating test contacts...");
+        _userInterface.ShowInfo("Updating test contacts individually...");
 
         foreach (Guid contactId in contactIds.Take(2))
         {
@@ -445,65 +502,69 @@ public class DataverseOperations(
                 ["description"] = $"Updated at {DateTime.Now:yyyy-MM-dd HH:mm:ss}"
             };
 
-            await dataverseClient.UpdateAsync(updateContact);
+            await _dataverseClient.UpdateAsync(updateContact);
         }
 
-        userInterface.ShowSuccess($"Updated {Math.Min(2, contactIds.Count)} test contacts");
+        _userInterface.ShowSuccess($"Updated {Math.Min(2, contactIds.Count)} test contacts individually");
     }
 
-    private async Task DeleteTestContactsAsync(List<Guid> contactIds)
+    // Individual delete operations for CRUD demo
+    private async Task DeleteTestContactsIndividuallyAsync(List<Guid> contactIds)
     {
-        userInterface.ShowInfo("Deleting test contacts...");
+        _userInterface.ShowInfo("Deleting test contacts individually...");
 
         int deletedCount = 0;
         foreach (Guid contactId in contactIds)
         {
             try
             {
-                await dataverseClient.DeleteAsync("contact", contactId);
+                await _dataverseClient.DeleteAsync("contact", contactId);
                 deletedCount++;
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to delete contact {ContactId}", contactId);
+                _logger.LogWarning(ex, "Failed to delete contact {ContactId}", contactId);
             }
         }
 
-        userInterface.ShowSuccess($"Deleted {deletedCount} test contacts");
+        _userInterface.ShowSuccess($"Deleted {deletedCount} test contacts individually");
     }
+
+    #endregion
+
+    #region Private Helper Methods - Batch Operations
 
     private async Task TestBatchCreateAsync(int recordCount, BatchConfiguration config)
     {
-        userInterface.ShowInfo($"Testing batch create with {recordCount} records...");
+        _userInterface.ShowInfo($"Testing batch create with {recordCount} records...");
 
         List<Entity> records = SampleDataGenerator.CreateBatchTestRecords(recordCount, config.BatchSize ?? 100, true);
-
-        Stopwatch stopwatch = Stopwatch.StartNew();
-        BatchOperationResult result = await dataverseClient.CreateBatchAsync(records, config);
+        
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        BatchOperationResult result = await _dataverseClient.CreateBatchAsync(records, config);
         stopwatch.Stop();
 
         _createdRecordIds.AddRange(result.CreatedRecords.Select(er => er.Id));
-        userInterface.DisplayBatchResult(result, stopwatch.Elapsed);
+        _userInterface.DisplayBatchResult(result, stopwatch.Elapsed);
     }
 
     private async Task TestBatchRetrieveAsync(BatchConfiguration config)
     {
-        userInterface.ShowInfo("Testing batch retrieve...");
+        _userInterface.ShowInfo("Testing batch retrieve...");
 
-        List<EntityReference> entityRefs =
-            [.. _createdRecordIds.Select(id => new EntityReference(_testTableName!, id))];
+        List<EntityReference> entityRefs = _createdRecordIds.Select(id => new EntityReference(_testTableName!, id)).ToList();
         ColumnSet columns = new(SampleDataGenerator.GetTestTableColumnNames());
 
-        Stopwatch stopwatch = Stopwatch.StartNew();
-        BatchRetrieveResult result = await dataverseClient.RetrieveBatchAsync(entityRefs, columns, config);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        BatchRetrieveResult result = await _dataverseClient.RetrieveBatchAsync(entityRefs, columns, config);
         stopwatch.Stop();
 
-        userInterface.DisplayBatchRetrieveResult(result, stopwatch.Elapsed);
+        _userInterface.DisplayBatchRetrieveResult(result, stopwatch.Elapsed);
     }
 
     private async Task TestBatchUpdateAsync(BatchConfiguration config)
     {
-        userInterface.ShowInfo("Testing batch update...");
+        _userInterface.ShowInfo("Testing batch update...");
 
         List<Entity> updateEntities = [];
         foreach (Guid recordId in _createdRecordIds.Take(_createdRecordIds.Count / 2))
@@ -516,11 +577,26 @@ public class DataverseOperations(
             updateEntities.Add(updateEntity);
         }
 
-        Stopwatch stopwatch = Stopwatch.StartNew();
-        BatchOperationResult result = await dataverseClient.UpdateBatchAsync(updateEntities, config);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        BatchOperationResult result = await _dataverseClient.UpdateBatchAsync(updateEntities, config);
         stopwatch.Stop();
 
-        userInterface.DisplayBatchResult(result, stopwatch.Elapsed);
+        _userInterface.DisplayBatchResult(result, stopwatch.Elapsed);
+    }
+
+    // NEW: Proper batch delete operation for batch operations demo
+    private async Task TestBatchDeleteAsync(BatchConfiguration config)
+    {
+        _userInterface.ShowInfo("Testing batch delete...");
+
+        List<EntityReference> entityRefs = _createdRecordIds.Select(id => new EntityReference(_testTableName!, id)).ToList();
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        BatchOperationResult result = await _dataverseClient.DeleteBatchAsync(entityRefs, config);
+        stopwatch.Stop();
+
+        _createdRecordIds.Clear();
+        _userInterface.DisplayBatchResult(result, stopwatch.Elapsed);
     }
 
     private async Task TestContactBatchOperationsAsync(int recordCount, BatchConfiguration config, bool cleanup)
@@ -530,145 +606,161 @@ public class DataverseOperations(
         try
         {
             // Create batch of contacts
-            userInterface.ShowInfo($"Creating {recordCount} contacts via batch...");
+            _userInterface.ShowInfo($"Creating {recordCount} contacts via batch...");
             List<Entity> contacts = SampleDataGenerator.CreateSampleContacts(recordCount, true);
 
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            BatchOperationResult createResult = await dataverseClient.CreateBatchAsync(contacts, config);
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            BatchOperationResult createResult = await _dataverseClient.CreateBatchAsync(contacts, config);
             stopwatch.Stop();
 
             contactIds.AddRange(createResult.CreatedRecords.Select(er => er.Id));
-            userInterface.DisplayBatchResult(createResult, stopwatch.Elapsed);
+            _userInterface.DisplayBatchResult(createResult, stopwatch.Elapsed);
 
             // Retrieve batch of contacts
             if (contactIds.Count > 0)
             {
-                userInterface.ShowInfo("Retrieving contacts via batch...");
-                List<EntityReference> entityRefs = [.. contactIds.Select(id => new EntityReference("contact", id))];
+                _userInterface.ShowInfo("Retrieving contacts via batch...");
+                List<EntityReference> entityRefs = contactIds.Select(id => new EntityReference("contact", id)).ToList();
                 ColumnSet columns = new("firstname", "lastname", "emailaddress1", "telephone1", "jobtitle");
 
                 stopwatch.Restart();
-                BatchRetrieveResult retrieveResult =
-                    await dataverseClient.RetrieveBatchAsync(entityRefs, columns, config);
+                BatchRetrieveResult retrieveResult = await _dataverseClient.RetrieveBatchAsync(entityRefs, columns, config);
                 stopwatch.Stop();
 
-                userInterface.DisplayBatchRetrieveResult(retrieveResult, stopwatch.Elapsed);
+                _userInterface.DisplayBatchRetrieveResult(retrieveResult, stopwatch.Elapsed);
             }
 
             // Update batch of contacts
             if (contactIds.Count > 0)
             {
-                userInterface.ShowInfo("Updating contacts via batch...");
-                List<Entity> updateContacts = [.. contactIds.Take(contactIds.Count / 2).Select(id =>
-                    new Entity("contact", id)
-                    {
-                        ["jobtitle"] = "BATCH UPDATED - Senior Developer",
-                        ["description"] =
-                            $"Contact updated via batch operation at {DateTime.Now:yyyy-MM-dd HH:mm:ss}"
-                    })];
+                _userInterface.ShowInfo("Updating contacts via batch...");
+                List<Entity> updateContacts = contactIds.Take(contactIds.Count / 2).Select(id => new Entity("contact", id)
+                {
+                    ["jobtitle"] = "BATCH UPDATED - Senior Developer",
+                    ["description"] = $"Contact updated via batch operation at {DateTime.Now:yyyy-MM-dd HH:mm:ss}"
+                }).ToList();
 
                 stopwatch.Restart();
-                BatchOperationResult updateResult = await dataverseClient.UpdateBatchAsync(updateContacts, config);
+                BatchOperationResult updateResult = await _dataverseClient.UpdateBatchAsync(updateContacts, config);
                 stopwatch.Stop();
 
-                userInterface.DisplayBatchResult(updateResult, stopwatch.Elapsed);
+                _userInterface.DisplayBatchResult(updateResult, stopwatch.Elapsed);
             }
 
-            // Delete batch of contacts
+            // Delete batch of contacts - USING BATCH OPERATIONS
             if (cleanup && contactIds.Count > 0)
             {
-                userInterface.ShowInfo("Deleting contacts via batch...");
-                List<EntityReference> entityRefs = [.. contactIds.Select(id => new EntityReference("contact", id))];
+                _userInterface.ShowInfo("Deleting contacts via batch...");
+                List<EntityReference> entityRefs = contactIds.Select(id => new EntityReference("contact", id)).ToList();
 
                 stopwatch.Restart();
-                BatchOperationResult deleteResult = await dataverseClient.DeleteBatchAsync(entityRefs, config);
+                BatchOperationResult deleteResult = await _dataverseClient.DeleteBatchAsync(entityRefs, config);
                 stopwatch.Stop();
 
-                userInterface.DisplayBatchResult(deleteResult, stopwatch.Elapsed);
+                _userInterface.DisplayBatchResult(deleteResult, stopwatch.Elapsed);
                 contactIds.Clear();
             }
         }
         finally
         {
-            // Cleanup any remaining contacts
+            // Cleanup any remaining contacts using BATCH operations
             if (contactIds.Count > 0)
             {
-                userInterface.ShowWarning($"Cleaning up {contactIds.Count} remaining test contacts...");
-                foreach (Guid contactId in contactIds)
+                _userInterface.ShowWarning($"Cleaning up {contactIds.Count} remaining test contacts via batch...");
+                try
                 {
-                    try
+                    List<EntityReference> entityRefs = contactIds.Select(id => new EntityReference("contact", id)).ToList();
+                    await _dataverseClient.DeleteBatchAsync(entityRefs, config);
+                    _userInterface.ShowSuccess($"Batch cleanup completed for {contactIds.Count} contacts");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to batch delete remaining contacts, falling back to individual deletes");
+                    // Only fall back to individual deletes if batch delete fails
+                    foreach (Guid contactId in contactIds)
                     {
-                        await dataverseClient.DeleteAsync("contact", contactId);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Failed to delete contact {ContactId}", contactId);
+                        try
+                        {
+                            await _dataverseClient.DeleteAsync("contact", contactId);
+                        }
+                        catch (Exception individualEx)
+                        {
+                            _logger.LogWarning(individualEx, "Failed to delete contact {ContactId}", contactId);
+                        }
                     }
                 }
             }
         }
     }
 
+    #endregion
+
+    #region Private Helper Methods - Table Management
+
     private async Task CreateCustomTableAsync()
     {
-        userInterface.ShowInfo("Creating custom table...");
+        _userInterface.ShowInfo("Creating custom table...");
 
         TableDefinition tableDefinition = SampleDataGenerator.CreateTestTableDefinition();
-        string tableName = await metadataClient.CreateTableAsync(tableDefinition);
+        string tableName = await _metadataClient.CreateTableAsync(tableDefinition);
 
-        userInterface.ShowSuccess($"Created custom table: {tableName}");
+        _userInterface.ShowSuccess($"Created custom table: {tableName}");
         _testTableName = tableName;
     }
 
     private async Task GetTableMetadataAsync(string tableName)
     {
-        userInterface.ShowInfo($"Retrieving metadata for table: {tableName}");
+        _userInterface.ShowInfo($"Retrieving metadata for table: {tableName}");
 
-        TableMetadata metadata = await metadataClient.GetTableMetadataAsync(tableName);
-        userInterface.DisplayTableMetadata(metadata);
+        TableMetadata metadata = await _metadataClient.GetTableMetadataAsync(tableName);
+        _userInterface.DisplayTableMetadata(metadata);
     }
 
     private async Task CheckTableExistsAsync(string tableName)
     {
-        userInterface.ShowInfo($"Checking if table exists: {tableName}");
+        _userInterface.ShowInfo($"Checking if table exists: {tableName}");
 
-        bool exists = await metadataClient.TableExistsAsync(tableName);
-        userInterface.ShowInfo($"Table '{tableName}' exists: {exists}");
+        bool exists = await _metadataClient.TableExistsAsync(tableName);
+        _userInterface.ShowInfo($"Table '{tableName}' exists: {exists}");
     }
 
-    /// <summary>
-    /// Deletes a custom table and displays appropriate user feedback.
-    /// </summary>
     private async Task DeleteCustomTableAsync(string tableName)
     {
         try
         {
-            userInterface.ShowInfo($"Deleting custom table '{tableName}'...");
+            _userInterface.ShowInfo($"Deleting custom table '{tableName}'...");
 
-            // Check if table exists before attempting deletion
-            if (await metadataClient.TableExistsAsync(tableName))
+            if (await _metadataClient.TableExistsAsync(tableName))
             {
-                await metadataClient.DeleteTableAsync(tableName);
-                userInterface.ShowSuccess($"Custom table '{tableName}' deleted successfully");
+                await _metadataClient.DeleteTableAsync(tableName);
+                _userInterface.ShowSuccess($"Custom table '{tableName}' deleted successfully");
             }
             else
             {
-                userInterface.ShowWarning($"Custom table '{tableName}' no longer exists");
+                _userInterface.ShowWarning($"Custom table '{tableName}' no longer exists");
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to delete custom table {TableName}", tableName);
-            userInterface.ShowError($"Failed to delete custom table '{tableName}': {ex.Message}");
+            _logger.LogError(ex, "Failed to delete custom table {TableName}", tableName);
+            _userInterface.ShowError($"Failed to delete custom table '{tableName}': {ex.Message}");
             throw;
         }
     }
 
+    #endregion
+
+    #region Private Helper Methods - Query Operations
+
     private async Task DemonstrateQueryExpressionAsync(string entityName)
     {
-        userInterface.ShowInfo($"Executing QueryExpression on {entityName}");
+        _userInterface.ShowInfo($"Executing QueryExpression on {entityName}");
 
-        QueryExpression query = new(entityName) { ColumnSet = new ColumnSet(true), TopCount = 5 };
+        QueryExpression query = new(entityName)
+        {
+            ColumnSet = new ColumnSet(true),
+            TopCount = 5
+        };
 
         if (entityName == "contact")
         {
@@ -678,13 +770,13 @@ public class DataverseOperations(
             };
         }
 
-        EntityCollection results = await dataverseClient.RetrieveMultipleAsync(query);
-        userInterface.DisplayQueryResults(results, "QueryExpression");
+        EntityCollection results = await _dataverseClient.RetrieveMultipleAsync(query);
+        _userInterface.DisplayQueryResults(results, "QueryExpression");
     }
 
     private async Task DemonstrateFetchXmlAsync(string entityName)
     {
-        userInterface.ShowInfo($"Executing FetchXML on {entityName}");
+        _userInterface.ShowInfo($"Executing FetchXML on {entityName}");
 
         string fetchXml = entityName == "contact"
             ? @"<fetch top='5'>
@@ -703,49 +795,50 @@ public class DataverseOperations(
                 </entity>
                </fetch>";
 
-        EntityCollection results = await dataverseClient.RetrieveMultipleAsync(fetchXml);
-        userInterface.DisplayQueryResults(results, "FetchXML");
+        EntityCollection results = await _dataverseClient.RetrieveMultipleAsync(fetchXml);
+        _userInterface.DisplayQueryResults(results, "FetchXML");
     }
+
+    #endregion
+
+    #region Private Helper Methods - Performance Testing
 
     private async Task ComparePerformanceAsync(int recordCount, int batchSize, TableCleanupOption cleanupOption)
     {
-        userInterface.ShowInfo($"Comparing Individual vs Batch Performance ({recordCount} records)");
+        _userInterface.ShowInfo($"Comparing Individual vs Batch Performance ({recordCount} records)");
 
-        // Ensure test table exists
-        _testTableName = await SampleDataGenerator.CreateTestTableAsync(metadataClient);
+        _testTableName = await SampleDataGenerator.CreateTestTableAsync(_metadataClient);
 
         try
         {
             // Test individual operations
-            userInterface.ShowInfo("Testing individual operations...");
-            Stopwatch individualStopwatch = Stopwatch.StartNew();
+            _userInterface.ShowInfo("Testing individual operations...");
+            var individualStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             List<Guid> individualIds = [];
             for (int i = 0; i < recordCount; i++)
             {
                 Entity record = SampleDataGenerator.CreateSampleTestRecord(i + 1);
-                Guid id = await dataverseClient.CreateAsync(record);
+                Guid id = await _dataverseClient.CreateAsync(record);
                 individualIds.Add(id);
             }
 
             individualStopwatch.Stop();
 
             // Test batch operations
-            userInterface.ShowInfo("Testing batch operations...");
-            Stopwatch batchStopwatch = Stopwatch.StartNew();
+            _userInterface.ShowInfo("Testing batch operations...");
+            var batchStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             List<Entity> batchRecords = SampleDataGenerator.CreateBatchTestRecords(recordCount, batchSize, false);
-            BatchOperationResult batchResult =
-                await dataverseClient.CreateBatchAsync(batchRecords, new BatchConfiguration { BatchSize = batchSize });
+            BatchOperationResult batchResult = await _dataverseClient.CreateBatchAsync(batchRecords, new BatchConfiguration { BatchSize = batchSize });
 
             batchStopwatch.Stop();
 
-            userInterface.DisplayPerformanceComparison(recordCount, individualStopwatch.Elapsed,
-                batchStopwatch.Elapsed);
+            _userInterface.DisplayPerformanceComparison(recordCount, individualStopwatch.Elapsed, batchStopwatch.Elapsed);
 
-            // Cleanup based on option
+            // Cleanup using batch operations for performance testing
             List<Guid> allRecordIds = [.. individualIds, .. batchResult.CreatedRecords.Select(er => er.Id)];
-            await CleanupRecordsAsync(allRecordIds);
+            await CleanupRecordsBatchAsync(allRecordIds);
 
             if (cleanupOption == TableCleanupOption.RecordsAndTable)
             {
@@ -755,43 +848,40 @@ public class DataverseOperations(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Performance comparison failed");
+            _logger.LogError(ex, "Performance comparison failed");
             throw;
         }
     }
 
     private async Task TestDifferentBatchSizesAsync(int recordCount, TableCleanupOption cleanupOption)
     {
-        userInterface.ShowInfo($"Testing Different Batch Sizes ({recordCount} records)");
+        _userInterface.ShowInfo($"Testing Different Batch Sizes ({recordCount} records)");
 
-        // Ensure test table exists
-        _testTableName = await SampleDataGenerator.CreateTestTableAsync(metadataClient);
+        _testTableName = await SampleDataGenerator.CreateTestTableAsync(_metadataClient);
 
         try
         {
             int[] batchSizes = [10, 50, 100, 200];
-            List<(int BatchSize, TimeSpan Duration, int SuccessCount)> results = [];
+            var results = new List<(int BatchSize, TimeSpan Duration, int SuccessCount)>();
 
             foreach (int batchSize in batchSizes)
             {
-                userInterface.ShowInfo($"Testing batch size: {batchSize}");
+                _userInterface.ShowInfo($"Testing batch size: {batchSize}");
 
                 List<Entity> records = SampleDataGenerator.CreateBatchTestRecords(recordCount, batchSize, false);
 
-                Stopwatch stopwatch = Stopwatch.StartNew();
-                BatchOperationResult result =
-                    await dataverseClient.CreateBatchAsync(records, new BatchConfiguration { BatchSize = batchSize });
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                BatchOperationResult result = await _dataverseClient.CreateBatchAsync(records, new BatchConfiguration { BatchSize = batchSize });
                 stopwatch.Stop();
 
                 results.Add((batchSize, stopwatch.Elapsed, result.SuccessCount));
 
-                // Cleanup records immediately after each test
-                await CleanupRecordsAsync([.. result.CreatedRecords.Select(er => er.Id)]);
+                // Cleanup records immediately after each test using batch operations
+                await CleanupRecordsBatchAsync(result.CreatedRecords.Select(er => er.Id).ToList());
             }
 
-            userInterface.DisplayBatchSizeComparison(results);
+            _userInterface.DisplayBatchSizeComparison(results);
 
-            // Handle table cleanup
             if (cleanupOption == TableCleanupOption.RecordsAndTable)
             {
                 await DeleteCustomTableAsync(_testTableName!);
@@ -800,47 +890,42 @@ public class DataverseOperations(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Batch size testing failed");
+            _logger.LogError(ex, "Batch size testing failed");
             throw;
         }
     }
 
     private async Task TestConcurrentOperationsAsync(int recordCount, int batchSize, TableCleanupOption cleanupOption)
     {
-        userInterface.ShowInfo($"Testing Concurrent Operations ({recordCount} records, {batchSize} batch size)");
+        _userInterface.ShowInfo($"Testing Concurrent Operations ({recordCount} records, {batchSize} batch size)");
 
-        // Ensure test table exists
-        _testTableName = await SampleDataGenerator.CreateTestTableAsync(metadataClient);
+        _testTableName = await SampleDataGenerator.CreateTestTableAsync(_metadataClient);
 
         try
         {
             int concurrentBatches = 3;
             int recordsPerBatch = recordCount / concurrentBatches;
 
-            userInterface.ShowInfo(
-                $"Running {concurrentBatches} concurrent batches of {recordsPerBatch} records each");
+            _userInterface.ShowInfo($"Running {concurrentBatches} concurrent batches of {recordsPerBatch} records each");
 
             List<Task<BatchOperationResult>> tasks = [];
-            Stopwatch stopwatch = Stopwatch.StartNew();
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             for (int i = 0; i < concurrentBatches; i++)
             {
-                List<Entity> batchRecords =
-                    SampleDataGenerator.CreateBatchTestRecords(recordsPerBatch, batchSize, false);
-                tasks.Add(dataverseClient.CreateBatchAsync(batchRecords,
-                    new BatchConfiguration { BatchSize = batchSize }));
+                List<Entity> batchRecords = SampleDataGenerator.CreateBatchTestRecords(recordsPerBatch, batchSize, false);
+                tasks.Add(_dataverseClient.CreateBatchAsync(batchRecords, new BatchConfiguration { BatchSize = batchSize }));
             }
 
             BatchOperationResult[] results = await Task.WhenAll(tasks);
             stopwatch.Stop();
 
-            userInterface.DisplayConcurrentOperationResults(results, stopwatch.Elapsed);
+            _userInterface.DisplayConcurrentOperationResults(results, stopwatch.Elapsed);
 
-            // Cleanup records
-            List<Guid> allCreatedIds = [.. results.SelectMany(r => r.CreatedRecords.Select(er => er.Id))];
-            await CleanupRecordsAsync(allCreatedIds);
+            // Cleanup records using batch operations
+            List<Guid> allCreatedIds = results.SelectMany(r => r.CreatedRecords.Select(er => er.Id)).ToList();
+            await CleanupRecordsBatchAsync(allCreatedIds);
 
-            // Handle table cleanup
             if (cleanupOption == TableCleanupOption.RecordsAndTable)
             {
                 await DeleteCustomTableAsync(_testTableName!);
@@ -849,34 +934,41 @@ public class DataverseOperations(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Concurrent operations testing failed");
+            _logger.LogError(ex, "Concurrent operations testing failed");
             throw;
         }
     }
 
-    private async Task CleanupRecordsAsync(List<Guid> recordIds)
+    // Batch cleanup method for performance testing and batch operations
+    private async Task CleanupRecordsBatchAsync(List<Guid> recordIds)
     {
         if (recordIds.Count == 0 || string.IsNullOrEmpty(_testTableName)) return;
 
         try
         {
-            List<EntityReference> entityRefs = [.. recordIds.Select(id => new EntityReference(_testTableName, id))];
-            await dataverseClient.DeleteBatchAsync(entityRefs, new BatchConfiguration { BatchSize = 100 });
+            _userInterface.ShowInfo($"Cleaning up {recordIds.Count} records via batch operations...");
+            List<EntityReference> entityRefs = recordIds.Select(id => new EntityReference(_testTableName, id)).ToList();
+            BatchOperationResult result = await _dataverseClient.DeleteBatchAsync(entityRefs, new BatchConfiguration { BatchSize = 100 });
+            _userInterface.ShowSuccess($"Batch cleanup completed: {result.SuccessCount} deleted, {result.FailureCount} failed");
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to cleanup {RecordCount} records", recordIds.Count);
+            _logger.LogWarning(ex, "Failed to cleanup {RecordCount} records via batch", recordIds.Count);
+            _userInterface.ShowWarning($"Batch cleanup failed for {recordIds.Count} records");
         }
     }
 
     /// <summary>
     /// Handles cleanup of custom table records and optionally the table itself.
     /// </summary>
-    private async Task HandleCustomTableCleanupAsync(TableCleanupOption cleanupOption, bool shouldCleanup)
+    /// <param name="cleanupOption">The cleanup option to apply</param>
+    /// <param name="shouldCleanup">Whether cleanup should be performed</param>
+    /// <param name="useIndividualDeletes">Whether to use individual deletes (for CRUD demo) or batch deletes (for batch demo)</param>
+    private async Task HandleCustomTableCleanupAsync(TableCleanupOption cleanupOption, bool shouldCleanup, bool useIndividualDeletes)
     {
         if (!shouldCleanup || cleanupOption == TableCleanupOption.None)
         {
-            userInterface.ShowInfo("Skipping cleanup as requested");
+            _userInterface.ShowInfo("Skipping cleanup as requested");
             return;
         }
 
@@ -885,25 +977,41 @@ public class DataverseOperations(
             switch (cleanupOption)
             {
                 case TableCleanupOption.RecordsOnly:
-                    await DeleteTestRecordsAsync();
-                    userInterface.ShowInfo($"Custom table '{_testTableName}' preserved for future use");
+                    if (useIndividualDeletes)
+                    {
+                        await DeleteTestRecordsIndividuallyAsync();
+                    }
+                    else
+                    {
+                        await CleanupRecordsBatchAsync(_createdRecordIds.ToList());
+                        _createdRecordIds.Clear();
+                    }
+                    _userInterface.ShowInfo($"Custom table '{_testTableName}' preserved for future use");
                     break;
 
                 case TableCleanupOption.RecordsAndTable:
-                    await DeleteTestRecordsAsync();
+                    if (useIndividualDeletes)
+                    {
+                        await DeleteTestRecordsIndividuallyAsync();
+                    }
+                    else
+                    {
+                        await CleanupRecordsBatchAsync(_createdRecordIds.ToList());
+                        _createdRecordIds.Clear();
+                    }
+                    
                     if (!string.IsNullOrEmpty(_testTableName))
                     {
                         await DeleteCustomTableAsync(_testTableName);
-                        _testTableName = null; // Reset to indicate table is gone
+                        _testTableName = null;
                     }
-
                     break;
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to perform cleanup with option {CleanupOption}", cleanupOption);
-            userInterface.ShowError($"Cleanup failed: {ex.Message}");
+            _logger.LogError(ex, "Failed to perform cleanup with option {CleanupOption}", cleanupOption);
+            _userInterface.ShowError($"Cleanup failed: {ex.Message}");
         }
     }
 
