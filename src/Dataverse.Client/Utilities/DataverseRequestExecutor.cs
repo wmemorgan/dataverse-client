@@ -40,7 +40,7 @@ public static class DataverseRequestExecutor
         {
             try
             {
-                OrganizationResponse? response = await Task.Run(() => serviceClient.Execute(request));
+                OrganizationResponse? response = await serviceClient.ExecuteAsync(request);
                 return (TResponse)response;
             }
             catch (Exception ex) when (currentAttempt < maxRetries && DataverseUtilities.IsTransientException(ex))
@@ -56,7 +56,7 @@ public static class DataverseRequestExecutor
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, 
+                logger.LogError(ex,
                     "{OperationContext} failed on attempt {Attempt}/{MaxAttempts} with non-transient error",
                     operationContext, currentAttempt + 1, maxRetries + 1);
                 throw;
