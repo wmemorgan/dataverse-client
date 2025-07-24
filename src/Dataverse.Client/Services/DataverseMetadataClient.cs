@@ -19,7 +19,6 @@ public class DataverseMetadataClient : IDataverseMetadataClient
 
     private readonly ServiceClient _serviceClient;
     private readonly ILogger<DataverseMetadataClient> _logger;
-    private readonly DataverseClientOptions _options;
     private bool _disposed;
 
     #endregion
@@ -39,7 +38,6 @@ public class DataverseMetadataClient : IDataverseMetadataClient
         ArgumentNullException.ThrowIfNull(logger, nameof(logger));
 
         _serviceClient = serviceClient;
-        _options = options.Value;
         _logger = logger;
 
         _logger.LogInformation("DataverseMetadataClient initialized with connection to {OrganizationUri}",
