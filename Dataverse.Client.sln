@@ -7,6 +7,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dataverse.Client", "src\Dat
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dataverse.Client.Tests", "tests\Dataverse.Client.Tests\Dataverse.Client.Tests.csproj", "{4836D094-5637-6D3A-2140-16D1E1880F26}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleDemo", "samples\ConsoleDemo\ConsoleDemo.csproj", "{FDBE765A-2405-658C-F9F7-E6393B0822E3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dataverse.Samples.Common", "samples\Dataverse.Samples.Common\Dataverse.Samples.Common.csproj", "{CC303B8F-55AC-B574-58BD-E1FA781C0BB6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +25,14 @@ Global
 		{4836D094-5637-6D3A-2140-16D1E1880F26}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4836D094-5637-6D3A-2140-16D1E1880F26}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4836D094-5637-6D3A-2140-16D1E1880F26}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FDBE765A-2405-658C-F9F7-E6393B0822E3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FDBE765A-2405-658C-F9F7-E6393B0822E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FDBE765A-2405-658C-F9F7-E6393B0822E3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FDBE765A-2405-658C-F9F7-E6393B0822E3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CC303B8F-55AC-B574-58BD-E1FA781C0BB6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CC303B8F-55AC-B574-58BD-E1FA781C0BB6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CC303B8F-55AC-B574-58BD-E1FA781C0BB6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CC303B8F-55AC-B574-58BD-E1FA781C0BB6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
