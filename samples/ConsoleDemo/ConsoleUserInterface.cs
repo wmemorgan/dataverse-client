@@ -62,7 +62,7 @@ public class ConsoleUserInterface : IUserInterface
 
         double individualRate = recordCount / individualTime.TotalSeconds;
         double batchRate = recordCount / batchTime.TotalSeconds;
-        double improvement = (individualTime.TotalMilliseconds / batchTime.TotalMilliseconds - 1) * 100;
+        double improvement = ((individualTime.TotalMilliseconds / batchTime.TotalMilliseconds) - 1) * 100;
 
         table.AddRow("Individual Operations", 
                     individualTime.ToString(@"mm\:ss\.fff"), 
@@ -261,8 +261,8 @@ public class ConsoleUserInterface : IUserInterface
         var recordCount = AnsiConsole.Prompt(
             new TextPrompt<int>("Number of records to create:")
                 .DefaultValue(5)
-                .Validate(count => count is > 0 and <= 50 
-                    ? SpectreValidationResult.Success() 
+                .Validate(count => count is > 0 and <= 50
+                    ? SpectreValidationResult.Success()
                     : SpectreValidationResult.Error("Must be between 1 and 50")));
 
         var includeCreate = AnsiConsole.Confirm("Include Create operations?", true);
@@ -270,6 +270,24 @@ public class ConsoleUserInterface : IUserInterface
         var includeUpdate = AnsiConsole.Confirm("Include Update operations?", true);
         var includeDelete = AnsiConsole.Confirm("Include Delete operations?", false);
         var cleanupAfter = AnsiConsole.Confirm("Cleanup records after demo?", true);
+
+        TableCleanupOption tableCleanupOption = TableCleanupOption.RecordsOnly;
+        if (cleanupAfter && entityType == EntityType.CustomTable)
+        {
+            tableCleanupOption = AnsiConsole.Prompt(
+                new SelectionPrompt<TableCleanupOption>()
+                    .Title("Choose cleanup option for custom table:")
+                    .AddChoices([
+                        TableCleanupOption.RecordsOnly,
+                        TableCleanupOption.RecordsAndTable
+                    ])
+                    .UseConverter(option => option switch
+                    {
+                        TableCleanupOption.RecordsOnly => "Delete records only (keep table)",
+                        TableCleanupOption.RecordsAndTable => "Delete records and table",
+                        _ => option.ToString()
+                    }));
+        }
 
         return new CrudOptions
         {
@@ -279,7 +297,8 @@ public class ConsoleUserInterface : IUserInterface
             IncludeRetrieve = includeRetrieve,
             IncludeUpdate = includeUpdate,
             IncludeDelete = includeDelete,
-            CleanupAfter = cleanupAfter
+            CleanupAfter = cleanupAfter,
+            TableCleanupOption = tableCleanupOption
         };
     }
 
@@ -293,19 +312,37 @@ public class ConsoleUserInterface : IUserInterface
         var recordCount = AnsiConsole.Prompt(
             new TextPrompt<int>("Number of records for batch operations:")
                 .DefaultValue(100)
-                .Validate(count => count is > 0 and <= 1000 
-                    ? SpectreValidationResult.Success() 
+                .Validate(count => count is > 0 and <= 1000
+                    ? SpectreValidationResult.Success()
                     : SpectreValidationResult.Error("Must be between 1 and 1000")));
 
         var batchSize = AnsiConsole.Prompt(
             new TextPrompt<int>("Batch size:")
                 .DefaultValue(50)
-                .Validate(size => size is > 0 and <= 200 
-                    ? SpectreValidationResult.Success() 
+                .Validate(size => size is > 0 and <= 200
+                    ? SpectreValidationResult.Success()
                     : SpectreValidationResult.Error("Must be between 1 and 200")));
 
         var enableProgressReporting = AnsiConsole.Confirm("Enable progress reporting?", recordCount > 50);
         var cleanupAfter = AnsiConsole.Confirm("Cleanup records after demo?", true);
+
+        TableCleanupOption tableCleanupOption = TableCleanupOption.RecordsOnly;
+        if (cleanupAfter && entityType == EntityType.CustomTable)
+        {
+            tableCleanupOption = AnsiConsole.Prompt(
+                new SelectionPrompt<TableCleanupOption>()
+                    .Title("Choose cleanup option for custom table:")
+                    .AddChoices([
+                        TableCleanupOption.RecordsOnly,
+                        TableCleanupOption.RecordsAndTable
+                    ])
+                    .UseConverter(option => option switch
+                    {
+                        TableCleanupOption.RecordsOnly => "Delete records only (keep table)",
+                        TableCleanupOption.RecordsAndTable => "Delete records and table",
+                        _ => option.ToString()
+                    }));
+        }
 
         return new BatchOptions
         {
@@ -313,7 +350,8 @@ public class ConsoleUserInterface : IUserInterface
             RecordCount = recordCount,
             BatchSize = batchSize,
             EnableProgressReporting = enableProgressReporting,
-            CleanupAfter = cleanupAfter
+            CleanupAfter = cleanupAfter,
+            TableCleanupOption = tableCleanupOption
         };
     }
 

@@ -56,6 +56,19 @@ public enum PerformanceTestType
     ConcurrentOperations
 }
 
+/// <summary>
+/// Available cleanup options for custom tables.
+/// </summary>
+public enum TableCleanupOption
+{
+    /// <summary>Delete records only, keep the table</summary>
+    RecordsOnly,
+    /// <summary>Delete records and the custom table</summary>
+    RecordsAndTable,
+    /// <summary>Keep everything (no cleanup)</summary>
+    None
+}
+
 #endregion
 
 #region Configuration Classes
@@ -101,12 +114,19 @@ public class CrudOptions
     public bool CleanupAfter { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets the cleanup option for custom tables (records only or records + table).
+    /// Only applies when EntityType is CustomTable and CleanupAfter is true.
+    /// </summary>
+    public TableCleanupOption TableCleanupOption { get; set; } = TableCleanupOption.RecordsOnly;
+
+    /// <summary>
     /// Returns a string representation of the CRUD options.
     /// </summary>
     public override string ToString() =>
         $"CrudOptions [Entity: {EntityType}, Records: {RecordCount}, " +
         $"Operations: {(IncludeCreate ? "C" : "")}{(IncludeRetrieve ? "R" : "")}" +
-        $"{(IncludeUpdate ? "U" : "")}{(IncludeDelete ? "D" : "")}, Cleanup: {CleanupAfter}]";
+        $"{(IncludeUpdate ? "U" : "")}{(IncludeDelete ? "D" : "")}, " +
+        $"Cleanup: {(CleanupAfter ? TableCleanupOption.ToString() : "None")}]";
 }
 
 /// <summary>
@@ -140,6 +160,12 @@ public class BatchOptions
     public bool CleanupAfter { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets the cleanup option for custom tables (records only or records + table).
+    /// Only applies when EntityType is CustomTable and CleanupAfter is true.
+    /// </summary>
+    public TableCleanupOption TableCleanupOption { get; set; } = TableCleanupOption.RecordsOnly;
+
+    /// <summary>
     /// Gets the number of batches that will be created based on record count and batch size.
     /// </summary>
     public int ExpectedBatchCount => (int)Math.Ceiling((double)RecordCount / BatchSize);
@@ -150,7 +176,8 @@ public class BatchOptions
     public override string ToString() =>
         $"BatchOptions [Entity: {EntityType}, Records: {RecordCount}, " +
         $"BatchSize: {BatchSize}, Batches: {ExpectedBatchCount}, " +
-        $"Progress: {EnableProgressReporting}, Cleanup: {CleanupAfter}]";
+        $"Progress: {EnableProgressReporting}, " +
+        $"Cleanup: {(CleanupAfter ? TableCleanupOption.ToString() : "None")}]";
 }
 
 /// <summary>
@@ -299,12 +326,18 @@ public class PerformanceOptions
     public int IterationCount { get; set; } = 3;
 
     /// <summary>
+    /// Gets or sets the cleanup option for custom tables used in performance testing.
+    /// </summary>
+    public TableCleanupOption TableCleanupOption { get; set; } = TableCleanupOption.RecordsAndTable;
+
+    /// <summary>
     /// Returns a string representation of the performance options.
     /// </summary>
     public override string ToString() =>
         $"PerformanceOptions [Type: {TestType}, Records: {RecordCount}, " +
         $"BatchSize: {BatchSize}, Concurrent: {ConcurrentOperations}, " +
-        $"Iterations: {(RunMultipleIterations ? IterationCount.ToString() : "1")}]";
+        $"Iterations: {(RunMultipleIterations ? IterationCount.ToString() : "1")}, " +
+        $"Cleanup: {TableCleanupOption}]";
 }
 
 #endregion

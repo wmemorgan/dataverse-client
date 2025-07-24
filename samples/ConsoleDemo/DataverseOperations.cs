@@ -78,10 +78,10 @@ public class DataverseOperations : IDataverseOperations
                 await UpdateTestRecordsAsync();
             }
 
-            // Delete records
-            if (options.IncludeDelete && options.CleanupAfter)
+            // Delete records and optionally table
+            if (options.IncludeDelete || (options.CleanupAfter && options.TableCleanupOption != TableCleanupOption.None))
             {
-                await DeleteTestRecordsAsync();
+                await HandleCustomTableCleanupAsync(options.TableCleanupOption, options.CleanupAfter);
             }
         }
         catch (Exception ex)
@@ -181,10 +181,10 @@ public class DataverseOperations : IDataverseOperations
                 await TestBatchUpdateAsync(batchConfig);
             }
 
-            // Test batch delete
-            if (options.CleanupAfter && _createdRecordIds.Count > 0)
+            // Handle cleanup based on options
+            if (options.CleanupAfter && options.TableCleanupOption != TableCleanupOption.None)
             {
-                await TestBatchDeleteAsync(batchConfig);
+                await HandleCustomTableCleanupAsync(options.TableCleanupOption, true);
             }
         }
         catch (Exception ex)
@@ -348,13 +348,13 @@ public class DataverseOperations : IDataverseOperations
             switch (options.TestType)
             {
                 case PerformanceTestType.BatchVsIndividual:
-                    await ComparePerformanceAsync(options.RecordCount, options.BatchSize);
+                    await ComparePerformanceAsync(options.RecordCount, options.BatchSize, options.TableCleanupOption);
                     break;
                 case PerformanceTestType.DifferentBatchSizes:
-                    await TestDifferentBatchSizesAsync(options.RecordCount);
+                    await TestDifferentBatchSizesAsync(options.RecordCount, options.TableCleanupOption);
                     break;
                 case PerformanceTestType.ConcurrentOperations:
-                    await TestConcurrentOperationsAsync(options.RecordCount, options.BatchSize);
+                    await TestConcurrentOperationsAsync(options.RecordCount, options.BatchSize, options.TableCleanupOption);
                     break;
             }
         }
@@ -684,12 +684,32 @@ public class DataverseOperations : IDataverseOperations
         _userInterface.ShowInfo($"Table '{tableName}' exists: {exists}");
     }
 
+    /// <summary>
+    /// Deletes a custom table and displays appropriate user feedback.
+    /// </summary>
     private async Task DeleteCustomTableAsync(string tableName)
     {
-        _userInterface.ShowInfo($"Deleting table: {tableName}");
+        try
+        {
+            _userInterface.ShowInfo($"Deleting custom table '{tableName}'...");
 
-        await _metadataClient.DeleteTableAsync(tableName);
-        _userInterface.ShowSuccess($"Deleted table: {tableName}");
+            // Check if table exists before attempting deletion
+            if (await _metadataClient.TableExistsAsync(tableName))
+            {
+                await _metadataClient.DeleteTableAsync(tableName);
+                _userInterface.ShowSuccess($"Custom table '{tableName}' deleted successfully");
+            }
+            else
+            {
+                _userInterface.ShowWarning($"Custom table '{tableName}' no longer exists");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete custom table {TableName}", tableName);
+            _userInterface.ShowError($"Failed to delete custom table '{tableName}': {ex.Message}");
+            throw;
+        }
     }
 
     private async Task DemonstrateQueryExpressionAsync(string entityName)
@@ -739,100 +759,145 @@ public class DataverseOperations : IDataverseOperations
         _userInterface.DisplayQueryResults(results, "FetchXML");
     }
 
-    private async Task ComparePerformanceAsync(int recordCount, int batchSize)
+    private async Task ComparePerformanceAsync(int recordCount, int batchSize, TableCleanupOption cleanupOption)
     {
         _userInterface.ShowInfo($"Comparing Individual vs Batch Performance ({recordCount} records)");
 
         // Ensure test table exists
         _testTableName = await SampleDataGenerator.CreateTestTableAsync(_metadataClient);
 
-        // Test individual operations
-        _userInterface.ShowInfo("Testing individual operations...");
-        var individualStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        
-        List<Guid> individualIds = [];
-        for (int i = 0; i < recordCount; i++)
+        try
         {
-            Entity record = SampleDataGenerator.CreateSampleTestRecord(i + 1);
-            Guid id = await _dataverseClient.CreateAsync(record);
-            individualIds.Add(id);
+            // Test individual operations
+            _userInterface.ShowInfo("Testing individual operations...");
+            var individualStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            List<Guid> individualIds = [];
+            for (int i = 0; i < recordCount; i++)
+            {
+                Entity record = SampleDataGenerator.CreateSampleTestRecord(i + 1);
+                Guid id = await _dataverseClient.CreateAsync(record);
+                individualIds.Add(id);
+            }
+
+            individualStopwatch.Stop();
+
+            // Test batch operations
+            _userInterface.ShowInfo("Testing batch operations...");
+            var batchStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            List<Entity> batchRecords = SampleDataGenerator.CreateBatchTestRecords(recordCount, batchSize, false);
+            BatchOperationResult batchResult = await _dataverseClient.CreateBatchAsync(batchRecords, new BatchConfiguration { BatchSize = batchSize });
+
+            batchStopwatch.Stop();
+
+            _userInterface.DisplayPerformanceComparison(recordCount, individualStopwatch.Elapsed, batchStopwatch.Elapsed);
+
+            // Cleanup based on option
+            List<Guid> allRecordIds = [.. individualIds, .. batchResult.CreatedRecords.Select(er => er.Id)];
+            await CleanupRecordsAsync(allRecordIds);
+
+            if (cleanupOption == TableCleanupOption.RecordsAndTable)
+            {
+                await DeleteCustomTableAsync(_testTableName!);
+                _testTableName = null;
+            }
         }
-        
-        individualStopwatch.Stop();
-
-        // Test batch operations
-        _userInterface.ShowInfo("Testing batch operations...");
-        var batchStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        
-        List<Entity> batchRecords = SampleDataGenerator.CreateBatchTestRecords(recordCount, batchSize, false);
-        BatchOperationResult batchResult = await _dataverseClient.CreateBatchAsync(batchRecords, new BatchConfiguration { BatchSize = batchSize });
-        
-        batchStopwatch.Stop();
-
-        _userInterface.DisplayPerformanceComparison(recordCount, individualStopwatch.Elapsed, batchStopwatch.Elapsed);
-
-        // Cleanup
-        await CleanupRecordsAsync([..individualIds, ..batchResult.CreatedRecords.Select(er => er.Id)]);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Performance comparison failed");
+            throw;
+        }
     }
 
-    private async Task TestDifferentBatchSizesAsync(int recordCount)
+    private async Task TestDifferentBatchSizesAsync(int recordCount, TableCleanupOption cleanupOption)
     {
         _userInterface.ShowInfo($"Testing Different Batch Sizes ({recordCount} records)");
 
         // Ensure test table exists
         _testTableName = await SampleDataGenerator.CreateTestTableAsync(_metadataClient);
 
-        int[] batchSizes = [10, 50, 100, 200];
-        var results = new List<(int BatchSize, TimeSpan Duration, int SuccessCount)>();
-
-        foreach (int batchSize in batchSizes)
+        try
         {
-            _userInterface.ShowInfo($"Testing batch size: {batchSize}");
+            int[] batchSizes = [10, 50, 100, 200];
+            var results = new List<(int BatchSize, TimeSpan Duration, int SuccessCount)>();
 
-            List<Entity> records = SampleDataGenerator.CreateBatchTestRecords(recordCount, batchSize, false);
-            
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            BatchOperationResult result = await _dataverseClient.CreateBatchAsync(records, new BatchConfiguration { BatchSize = batchSize });
-            stopwatch.Stop();
+            foreach (int batchSize in batchSizes)
+            {
+                _userInterface.ShowInfo($"Testing batch size: {batchSize}");
 
-            results.Add((batchSize, stopwatch.Elapsed, result.SuccessCount));
+                List<Entity> records = SampleDataGenerator.CreateBatchTestRecords(recordCount, batchSize, false);
 
-            // Cleanup
-            await CleanupRecordsAsync(result.CreatedRecords.Select(er => er.Id).ToList());
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                BatchOperationResult result = await _dataverseClient.CreateBatchAsync(records, new BatchConfiguration { BatchSize = batchSize });
+                stopwatch.Stop();
+
+                results.Add((batchSize, stopwatch.Elapsed, result.SuccessCount));
+
+                // Cleanup records immediately after each test
+                await CleanupRecordsAsync(result.CreatedRecords.Select(er => er.Id).ToList());
+            }
+
+            _userInterface.DisplayBatchSizeComparison(results);
+
+            // Handle table cleanup
+            if (cleanupOption == TableCleanupOption.RecordsAndTable)
+            {
+                await DeleteCustomTableAsync(_testTableName!);
+                _testTableName = null;
+            }
         }
-
-        _userInterface.DisplayBatchSizeComparison(results);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Batch size testing failed");
+            throw;
+        }
     }
 
-    private async Task TestConcurrentOperationsAsync(int recordCount, int batchSize)
+    private async Task TestConcurrentOperationsAsync(int recordCount, int batchSize, TableCleanupOption cleanupOption)
     {
         _userInterface.ShowInfo($"Testing Concurrent Operations ({recordCount} records, {batchSize} batch size)");
 
         // Ensure test table exists
         _testTableName = await SampleDataGenerator.CreateTestTableAsync(_metadataClient);
 
-        int concurrentBatches = 3;
-        int recordsPerBatch = recordCount / concurrentBatches;
-
-        _userInterface.ShowInfo($"Running {concurrentBatches} concurrent batches of {recordsPerBatch} records each");
-
-        List<Task<BatchOperationResult>> tasks = [];
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-        for (int i = 0; i < concurrentBatches; i++)
+        try
         {
-            List<Entity> batchRecords = SampleDataGenerator.CreateBatchTestRecords(recordsPerBatch, batchSize, false);
-            tasks.Add(_dataverseClient.CreateBatchAsync(batchRecords, new BatchConfiguration { BatchSize = batchSize }));
+            int concurrentBatches = 3;
+            int recordsPerBatch = recordCount / concurrentBatches;
+
+            _userInterface.ShowInfo($"Running {concurrentBatches} concurrent batches of {recordsPerBatch} records each");
+
+            List<Task<BatchOperationResult>> tasks = [];
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            for (int i = 0; i < concurrentBatches; i++)
+            {
+                List<Entity> batchRecords = SampleDataGenerator.CreateBatchTestRecords(recordsPerBatch, batchSize, false);
+                tasks.Add(_dataverseClient.CreateBatchAsync(batchRecords, new BatchConfiguration { BatchSize = batchSize }));
+            }
+
+            BatchOperationResult[] results = await Task.WhenAll(tasks);
+            stopwatch.Stop();
+
+            _userInterface.DisplayConcurrentOperationResults(results, stopwatch.Elapsed);
+
+            // Cleanup records
+            List<Guid> allCreatedIds = results.SelectMany(r => r.CreatedRecords.Select(er => er.Id)).ToList();
+            await CleanupRecordsAsync(allCreatedIds);
+
+            // Handle table cleanup
+            if (cleanupOption == TableCleanupOption.RecordsAndTable)
+            {
+                await DeleteCustomTableAsync(_testTableName!);
+                _testTableName = null;
+            }
         }
-
-        BatchOperationResult[] results = await Task.WhenAll(tasks);
-        stopwatch.Stop();
-
-        _userInterface.DisplayConcurrentOperationResults(results, stopwatch.Elapsed);
-
-        // Cleanup
-        List<Guid> allCreatedIds = results.SelectMany(r => r.CreatedRecords.Select(er => er.Id)).ToList();
-        await CleanupRecordsAsync(allCreatedIds);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Concurrent operations testing failed");
+            throw;
+        }
     }
 
     private async Task CleanupRecordsAsync(List<Guid> recordIds)
@@ -847,6 +912,43 @@ public class DataverseOperations : IDataverseOperations
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to cleanup {RecordCount} records", recordIds.Count);
+        }
+    }
+
+    /// <summary>
+    /// Handles cleanup of custom table records and optionally the table itself.
+    /// </summary>
+    private async Task HandleCustomTableCleanupAsync(TableCleanupOption cleanupOption, bool shouldCleanup)
+    {
+        if (!shouldCleanup || cleanupOption == TableCleanupOption.None)
+        {
+            _userInterface.ShowInfo("Skipping cleanup as requested");
+            return;
+        }
+
+        try
+        {
+            switch (cleanupOption)
+            {
+                case TableCleanupOption.RecordsOnly:
+                    await DeleteTestRecordsAsync();
+                    _userInterface.ShowInfo($"Custom table '{_testTableName}' preserved for future use");
+                    break;
+
+                case TableCleanupOption.RecordsAndTable:
+                    await DeleteTestRecordsAsync();
+                    if (!string.IsNullOrEmpty(_testTableName))
+                    {
+                        await DeleteCustomTableAsync(_testTableName);
+                        _testTableName = null; // Reset to indicate table is gone
+                    }
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to perform cleanup with option {CleanupOption}", cleanupOption);
+            _userInterface.ShowError($"Cleanup failed: {ex.Message}");
         }
     }
 
