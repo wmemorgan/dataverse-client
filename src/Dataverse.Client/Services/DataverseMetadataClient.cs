@@ -98,7 +98,8 @@ public class DataverseMetadataClient : IDataverseMetadataClient
             // Create the table
             CreateEntityRequest createEntityRequest = new()
             {
-                Entity = entityMetadata, PrimaryAttribute = primaryAttribute
+                Entity = entityMetadata,
+                PrimaryAttribute = primaryAttribute
             };
 
             CreateEntityResponse createEntityResponse = (CreateEntityResponse)await _serviceClient.ExecuteAsync(createEntityRequest);
@@ -196,7 +197,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
     private static bool IsFaultExceptionForEntityNotFound(Exception ex)
     {
         // Handle both FaultException and FaultException<T> by checking the base type
-        if (ex.GetType().Name.StartsWith("FaultException") || 
+        if (ex.GetType().Name.StartsWith("FaultException") ||
             ex.GetType().BaseType?.Name.StartsWith("FaultException") == true)
         {
             string message = ex.Message;
@@ -303,7 +304,8 @@ public class DataverseMetadataClient : IDataverseMetadataClient
 
             CreateAttributeRequest createAttributeRequest = new()
             {
-                EntityName = tableName, Attribute = attributeMetadata
+                EntityName = tableName,
+                Attribute = attributeMetadata
             };
 
             await _serviceClient.ExecuteAsync(createAttributeRequest);
@@ -335,7 +337,8 @@ public class DataverseMetadataClient : IDataverseMetadataClient
 
             DeleteAttributeRequest deleteAttributeRequest = new()
             {
-                EntityLogicalName = tableName, LogicalName = columnName
+                EntityLogicalName = tableName,
+                LogicalName = columnName
             };
 
             await _serviceClient.ExecuteAsync(deleteAttributeRequest);
