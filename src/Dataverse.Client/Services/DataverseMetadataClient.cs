@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Dataverse.Client.Interfaces;
 using Dataverse.Client.Models;
 using Microsoft.Extensions.Logging;
@@ -18,7 +19,6 @@ public class DataverseMetadataClient : IDataverseMetadataClient
 
     private readonly ServiceClient _serviceClient;
     private readonly ILogger<DataverseMetadataClient> _logger;
-    private readonly DataverseClientOptions _options;
     private bool _disposed;
 
     #endregion
@@ -38,7 +38,6 @@ public class DataverseMetadataClient : IDataverseMetadataClient
         ArgumentNullException.ThrowIfNull(logger, nameof(logger));
 
         _serviceClient = serviceClient;
-        _options = options.Value;
         _logger = logger;
 
         _logger.LogInformation("DataverseMetadataClient initialized with connection to {OrganizationUri}",
@@ -102,8 +101,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
                 Entity = entityMetadata, PrimaryAttribute = primaryAttribute
             };
 
-            CreateEntityResponse createEntityResponse = (CreateEntityResponse)await Task.Run(() =>
-                _serviceClient.Execute(createEntityRequest));
+            CreateEntityResponse createEntityResponse = (CreateEntityResponse)_serviceClient.Execute(createEntityRequest);
 
             _logger.LogInformation("Table '{TableName}' created successfully with ID {EntityId}",
                 tableDefinition.LogicalName, createEntityResponse.EntityId);
@@ -142,7 +140,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
 
             DeleteEntityRequest deleteEntityRequest = new() { LogicalName = logicalName };
 
-            await Task.Run(() => _serviceClient.Execute(deleteEntityRequest));
+            _serviceClient.Execute(deleteEntityRequest);
 
             _logger.LogInformation("Table '{TableName}' deleted successfully", logicalName);
         }
@@ -162,18 +160,68 @@ public class DataverseMetadataClient : IDataverseMetadataClient
 
         try
         {
+            _logger.LogDebug("Checking if table '{TableName}' exists", logicalName);
+
             RetrieveEntityRequest retrieveEntityRequest = new()
             {
-                LogicalName = logicalName, EntityFilters = EntityFilters.Entity
+                LogicalName = logicalName,
+                EntityFilters = EntityFilters.Entity
             };
 
-            await Task.Run(() => _serviceClient.Execute(retrieveEntityRequest));
+            // Execute directly without Task.Run to allow proper exception handling
+            await _serviceClient.ExecuteAsync(retrieveEntityRequest);
+
+            _logger.LogDebug("Table '{TableName}' exists", logicalName);
             return true;
         }
-        catch
+        catch (Exception ex) when (IsFaultExceptionForEntityNotFound(ex))
         {
+            _logger.LogDebug("Table '{TableName}' does not exist (error: {ErrorCode})",
+                logicalName, ExtractErrorCode(ex.Message));
             return false;
         }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error checking if table '{TableName}' exists: {Message}", logicalName, ex.Message);
+            // For other exceptions (connection issues, permission problems, etc.), 
+            // we should not assume the table doesn't exist
+            throw new DataverseException("TABLE_EXISTENCE_CHECK_FAILED",
+                $"Failed to check if table '{logicalName}' exists: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Determines if an exception (including FaultException and FaultException<T>) represents an "entity not found" error.
+    /// </summary>
+    private static bool IsFaultExceptionForEntityNotFound(Exception ex)
+    {
+        // Handle both FaultException and FaultException<T> by checking the base type
+        if (ex.GetType().Name.StartsWith("FaultException") || 
+            ex.GetType().BaseType?.Name.StartsWith("FaultException") == true)
+        {
+            string message = ex.Message;
+
+            // Check for common "entity not found" patterns
+            return message.Contains("Could not find an entity", StringComparison.OrdinalIgnoreCase) ||
+                   message.Contains("40850685") ||  // Known error code for entity not found
+                   message.Contains("40988325") ||  // Known error code for entity not found (from your error)
+                   message.Contains("Entity not found", StringComparison.OrdinalIgnoreCase) ||
+                   message.Contains("does not exist", StringComparison.OrdinalIgnoreCase) ||
+                   message.Contains("EntityMetadata", StringComparison.OrdinalIgnoreCase) ||
+                   message.Contains("not found", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Extracts error code from Dataverse error message.
+    /// </summary>
+    private static string ExtractErrorCode(string message)
+    {
+        // Look for patterns like (40988325) in the message
+        Match match = Regex.Match(message, @"\((\d+)\)");
+        return match.Success ? match.Groups[1].Value : "Unknown";
     }
 
     /// <inheritdoc />
@@ -182,17 +230,24 @@ public class DataverseMetadataClient : IDataverseMetadataClient
         if (string.IsNullOrWhiteSpace(logicalName))
             throw new ArgumentException("LogicalName cannot be null or empty", nameof(logicalName));
 
+        // Check if table exists first to provide a better error message
+        if (!await TableExistsAsync(logicalName))
+        {
+            throw new DataverseException("TABLE_NOT_FOUND",
+                $"Table '{logicalName}' does not exist in the current environment.");
+        }
+
         try
         {
             _logger.LogDebug("Retrieving metadata for table '{TableName}'", logicalName);
 
             RetrieveEntityRequest retrieveEntityRequest = new()
             {
-                LogicalName = logicalName, EntityFilters = EntityFilters.Entity | EntityFilters.Attributes
+                LogicalName = logicalName,
+                EntityFilters = EntityFilters.Entity | EntityFilters.Attributes
             };
 
-            RetrieveEntityResponse response = (RetrieveEntityResponse)await Task.Run(() =>
-                _serviceClient.Execute(retrieveEntityRequest));
+            RetrieveEntityResponse response = (RetrieveEntityResponse)_serviceClient.Execute(retrieveEntityRequest);
 
             EntityMetadata entityMetadata = response.EntityMetadata;
 
@@ -250,7 +305,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
                 EntityName = tableName, Attribute = attributeMetadata
             };
 
-            await Task.Run(() => _serviceClient.Execute(createAttributeRequest));
+            await _serviceClient.ExecuteAsync(createAttributeRequest);
 
             _logger.LogInformation("Column '{ColumnName}' added successfully to table '{TableName}'",
                 columnDefinition.LogicalName, tableName);
@@ -282,7 +337,7 @@ public class DataverseMetadataClient : IDataverseMetadataClient
                 EntityLogicalName = tableName, LogicalName = columnName
             };
 
-            await Task.Run(() => _serviceClient.Execute(deleteAttributeRequest));
+            await _serviceClient.ExecuteAsync(deleteAttributeRequest);
 
             _logger.LogInformation("Column '{ColumnName}' deleted successfully from table '{TableName}'",
                 columnName, tableName);
